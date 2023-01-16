@@ -1,0 +1,606 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r, import libraries}
+library(igraph)
+library(SingleCellExperiment)
+library(S4Vectors)
+library(stringr)
+library(DT)
+
+library(dplyr)
+library(tidyr)
+library(mclust)
+library(ggplot2)
+library(RColorBrewer)
+library(scater)
+library(Rphenoannoy)
+set.seed(101100)
+```
+
+```{r, Set wd and load data}
+#set working directory 
+wd <-dirname(getwd())
+
+data_folder <-file.path(wd, "sce_objects")
+```
+
+```{r Set wd and load data}
+#set working directory 
+sce_tumour <- readRDS(file=file.path(data_folder, "sce_tumour_mclust.rds"))
+sce_NONtumour <- readRDS(file=file.path(data_folder, "sce_NON-tumour_mclust.rds"))
+```
+
+```{r}
+sce_tumour$CellID <- paste(sce_tumour$SampleID, sce_tumour$acID, sce_tumour$CellNumber, sep="_")
+sce_NONtumour$CellID <- paste(sce_NONtumour$SampleID, sce_NONtumour$acID, sce_NONtumour$CellNumber, sep="_")
+
+sce$CellID <- paste(sce$SampleID, sce$acID, sce$CellNumber, sep="_")
+
+```
+
+```{r Define good markers, echo=F, warning=F, message=FALSE}
+all.marker <-rownames(sce)
+
+bad.marker <- c("Iridium191","Iridium193","CD11b","Histone H3") 
+good.marker <- all.marker[!all.marker %in% bad.marker]
+print(good.marker)
+```
+
+##TUMOUR
+
+```{r, sub tumour final, warning=F, message=F, echo=F, eval=F}
+#split cells by ImageNumber
+n_cells_dr <- 1000
+cs <- split(seq_len(ncol(sce_tumour)), sce_tumour$RoiID)
+length(unique(sce_tumour$RoiID))
+#sample 'n_cells_dr' per ImageNumber
+cs <- unlist(lapply(cs, function(u) 
+  sample(u, min(n_cells_dr, length(u)))))
+#sub.test <- sce[,cs]
+sce_tumour.sub <- sce_tumour[,cs]
+
+#calculate percentage of cells subsetting results in
+p<-dim(assay(sce_tumour.sub))[2]/dim(assay(sce_tumour))[2]*100
+
+#results in % of all cells
+print(paste("Subsetting results in a total number of",dim(assay(
+  sce_tumour.sub))[2],"cells, which corresponds to",round(p,digits=2), "% of all cells of the original sce." ))
+
+sce_tumour.sub$CellID <- paste(sce_tumour.sub$SampleID, sce_tumour.sub$acID, sce_tumour.sub$CellNumber, sep="_")
+
+saveRDS(sce_tumour.sub, file=file.path(data_folder, paste("sce_tumour_sub.rds")))
+```
+
+```{r, load subset, message=FALSE, warning=FALSE, echo=FALSE}
+sce_tumour.sub <- readRDS(file=file.path(data_folder, paste("sce_tumour_sub.rds")))
+```
+
+```{r, calculate umap, warning=F, message=F, echo=F, eval=FALSE}
+p <-c(10,50,100)
+
+for(i in p){
+sce_tumour.sub <- runUMAP(sce_tumour.sub,
+                 exprs_values = "c_counts_asinh",
+                 name = paste0("UMAP_p", i),
+                 #use_dimred="PCA_20",
+                 n_neighbors = i)
+saveRDS(sce_tumour.sub, file=file.path(data_folder, paste("sce_tumour_sub.rds")))
+
+}
+saveRDS(sce_tumour.sub, file=file.path(data_folder, paste("sce_tumour_sub.rds")))
+
+```
+
+
+**UMAP with Tumour markers**
+```{r,plot umap tumour marker, fig.width=12, fig.height=8, echo=F, message=FALSE,warning=FALSE}
+dat <-as.data.frame(reducedDims(sce_tumour.sub)$`UMAP_p50`)
+dat$cell <- rownames(dat)
+dat.counts <-as.data.frame(t((assay(sce_tumour.sub,"c_counts_asinh_scaled"))))
+dat.counts$cell <- rownames(dat.counts)
+dat.all <-merge(dat, dat.counts, by.x="cell", by.y="cell")
+
+dat.all.long <-pivot_longer(dat.all, cols = colnames(dat.all)[colnames(dat.all) %in% good.marker], names_to = "target", values_to = "counts")
+
+
+p <-dat.all.long %>%
+  ggplot(aes(x=V1, y=V2, color=counts))+
+  facet_wrap(~target, scales = "free", ncol = 6)+
+  geom_point(alpha=0.5, size=0.2)+
+  scale_color_gradientn(colours=rev(brewer.pal(11, 'Spectral')), name='Counts')+
+  ggtitle('')+
+  theme(strip.background = element_blank(),
+        axis.line=element_blank(),
+        axis.text.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks=element_blank(),
+        axis.title.x=element_blank(),
+        axis.title.y=element_blank(),
+        panel.background=element_blank(),
+        panel.border=element_blank(),
+        panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        plot.background=element_blank(),
+         strip.text = element_text(size=8)) 
+
+##ggsave(filename=file.path(plot_folder, paste("sub_fibro_fibro-Marker_UMAP_p50_NEW.png",sep="")), plot=p, width=16, height=10)
+plot(p)
+```
+
+
+
+
+
+```{r Clustering using Rphenoannoy, fig.width=25, fig.height=12}
+hmcol<-rev(brewer.pal(11,"RdBu"))
+rdylbu <-rev(brewer.pal(11,"RdYlBu"))
+library(Rphenoannoy)
+#marker.clustering <- good.marker[!good.marker %in% "Pan Cytokeratin + Keratin Epithelial"]
+#cellnb <- 250000
+#subsample <-  colnames(sce)[sample(length(colnames(sce)), cellnb)]
+#sce_sub <- sce[, colnames(sce) %in% subsample]
+
+#set ks for clustering
+#i <- 100
+k <- c(30,35,40)
+#i<-10
+for (i in k) {
+    sce_tumour$RPmembership <- factor(Rphenoannoy(data = t(assay(sce_tumour[rownames(sce_tumour) %in% good.marker,],"c_counts_asinh")), k = i)[[2]]$membership)
+    cluster <- paste0("rp_tumour_k",i)
+  colnames(colData(sce_tumour))[which(names(colData(sce_tumour)) == "RPmembership")] <- paste0(cluster)
+  agg_sce <-aggregateAcrossCells(sce_tumour, ids=sce_tumour[[cluster]], average=TRUE, use_exprs_values="c_counts_asinh_scaled" )
+
+ 
+    scater::plotHeatmap(agg_sce,
+              features = good.marker,
+              #features = all.marker,
+              #features = marker.clustering,
+              exprs_values = "c_counts_asinh_scaled",
+              symmetric = FALSE,
+              zlim=c(0,1),
+              color=rdylbu,
+              sortrowss=FALSE,
+              show_colnames=TRUE,
+              colour_columns_by = c(cluster),
+              main=paste0("Heatmap tumour cells, ",cluster))
+    
+  #save sce clustering
+  saveRDS(sce_tumour, file=file.path(data_folder, "all_tumour_workingfile.rds"))
+}
+sce_tumour <-readRDS( file=file.path(data_folder, "all_tumour_workingfile.rds"))
+
+```
+
+```{r, add clustering results to subset tumour}
+rp_df <- data.frame("CellID"=sce_tumour$CellID, "rp_tumour_k30"=sce_tumour$rp_tumour_k30,
+                    "rp_tumour_k35"=sce_tumour$rp_tumour_k35,
+                    "rp_tumour_k40"=sce_tumour$rp_tumour_k40 )
+
+cur_DF <- as_tibble(colData(sce_tumour.sub)) %>% left_join(rp_df, by = "CellID") %>% DataFrame()
+all.equal(paste(cur_DF$ImageNumber, cur_DF$CellNumber), paste(sce_tumour.sub$ImageNumber, sce_tumour.sub$CellNumber))
+
+colData(sce_tumour.sub) <- cur_DF
+rownames(colData(sce_tumour.sub)) <-sce_tumour.sub$CellID
+```
+
+
+```{r,define tumour non tumour from clustering}
+is.nt <-c(26,5,4,9,28,29,19,18,21,13,31)#17
+sce_tumour$tumour_nontumour <-ifelse(sce_tumour$rp_tumour_k30 %in% is.nt, "non_tumour","tumour")
+table(sce_tumour$tumour_nontumour)
+
+saveRDS(sce_tumour, file=file.path(data_folder, "sce_tumour_workingfile.rds"))
+
+sce_tumour.sub$tumour_nontumour <-ifelse(sce_tumour.sub$rp_tumour_k30 %in% is.nt, "non_tumour","tumour")
+
+saveRDS(sce_tumour.sub, file=file.path(data_folder,  paste("sce_tumour_sub.rds")))
+```
+
+
+```{r, plot umap sce_tumour cluster, warning=F, message=F, echo=F}
+cluster <- "tumour_nontumour"
+p <-plotReducedDim(sce_tumour.sub, "UMAP_p50", colour_by=paste(cluster), text_by = paste(cluster), point_size=0.5,)+labs(x="UMAP-1", y="UMAP-2", title="UMAP") +scale_color_manual(values=as.vector(glasbey(32)))
+plot(p)
+##ggsave(filename=file.path(plot_folder, paste("sub_Fibro_CAF-Clusters_UMAP_p50.png",sep="")), plot=p)
+
+cluster <- "rp_tumour_k30"
+p <-plotReducedDim(sce_tumour.sub, "UMAP_p50", colour_by=paste(cluster), text_by = paste(cluster), point_size=0.5,)+labs(x="UMAP-1", y="UMAP-2", title="UMAP") +scale_color_manual(values=as.vector(glasbey(32)))
+plot(p)
+```
+
+```{r, subset tumour into tumour_tumour and tumour_non tumour}
+tumour_tumour <- sce_tumour[, sce_tumour$tumour_nontumour=="tumour"]
+tumour_NONtumour <- sce_tumour[, sce_tumour$tumour_nontumour=="non_tumour"]
+
+saveRDS(tumour_tumour, file=file.path(data_folder, "tumour", paste("sce_tumour_tumour.rds")))
+saveRDS(tumour_NONtumour, file=file.path(data_folder, "tumour", paste("sce_tumour_NONtumour.rds")))
+
+tumour_tumour <-readRDS( file=file.path(data_folder, "tumour", paste("sce_tumour_tumour.rds")))
+tumour_NONtumour <-readRDS( file=file.path(data_folder, "tumour", paste("sce_tumour_NONtumour.rds")))
+
+```
+Cluster tumour cells hypoxic non hypoxic
+```{r glm tumour normal vs hypoxiv tumour }
+dat.counts <-as.data.frame(t((assay(tumour.sce,"c_counts_asinh"))))
+dat.counts$CellID <- rownames(dat.counts)
+dat.counts.panCK <- dat.counts %>% select(CellID, `Carbonic Anhydrase IX`)
+
+ggplot(dat.counts.panCK, aes(x=`Carbonic Anhydrase IX`)) + 
+  geom_density()
+
+glm.sce <-Mclust(dat.counts.panCK$`Carbonic Anhydrase IX`,G=2)
+#plot(glm.sce)
+table(glm.sce$classification)
+
+tumour.sce$mclust <- glm.sce$classification
+tumour.sce$tumour_type <- ifelse(tumour.sce$mclust==2, "hypoxic", "normal")
+table(tumour.sce$tumour_type)
+```
+
+
+##NON TUMOUR
+```{r}
+sce_NONtumour <- readRDS(file=file.path(data_folder, "sce_NON-tumour_mclust.rds"))
+saveRDS(sce_NONtumour, file=file.path(data_folder, "sce_NONtumour_workingfile.rds"))
+```
+
+
+```{r, sub non tumour, warning=F, message=F, echo=F, eval=F}
+#split cells by ImageNumber
+n_cells_dr <- 1000
+cs <- split(seq_len(ncol(sce_NONtumour)), sce_NONtumour$RoiID)
+length(unique(sce_NONtumour$RoiID))
+#sample 'n_cells_dr' per ImageNumber
+cs <- unlist(lapply(cs, function(u) 
+  sample(u, min(n_cells_dr, length(u)))))
+#sub.test <- sce[,cs]
+sce_NONtumour.sub <- sce_NONtumour[,cs]
+
+#calculate percentage of cells subsetting results in
+p<-dim(assay(sce_NONtumour.sub))[2]/dim(assay(sce_NONtumour))[2]*100
+
+#results in % of all cells
+print(paste("Subsetting results in a total number of",dim(assay(
+  sce_NONtumour.sub))[2],"cells, which corresponds to",round(p,digits=2), "% of all cells of the original sce." ))
+
+saveRDS(sce_NONtumour.sub, file=file.path(data_folder, paste("sce_NONtumour_sub.rds")))
+```
+
+```{r, load subset, message=FALSE, warning=FALSE, echo=FALSE}
+sce_NONtumour.sub <- readRDS(file=file.path(data_folder, paste("sce_NONtumour_sub.rds")))
+```
+
+```{r, calculate umap, warning=F, message=F, echo=F, eval=FALSE}
+p <-c(10,50,100)
+
+for(i in p){
+sce_NONtumour.sub <- runUMAP(sce_NONtumour.sub,
+                 exprs_values = "c_counts_asinh",
+                 name = paste0("UMAP_p", i),
+                 #use_dimred="PCA_20",
+                 n_neighbors = i)
+#saveRDS(sce_NONtumour.sub, file=file.path(data_folder, paste("sce_NONtumour_sub.rds")))
+
+}
+saveRDS(sce_NONtumour.sub, file=file.path(data_folder, paste("sce_NONtumour_sub.rds")))
+```
+
+
+**UMAP with Tumour markers**
+```{r,plot umap tumour marker, fig.width=12, fig.height=8, echo=F, message=FALSE,warning=FALSE}
+dat <-as.data.frame(reducedDims(sce_NONtumour.sub)$`UMAP_p50`)
+dat$cell <- rownames(dat)
+dat.counts <-as.data.frame(t((assay(sce_NONtumour.sub,"c_counts_asinh_scaled"))))
+dat.counts$cell <- rownames(dat.counts)
+dat.all <-merge(dat, dat.counts, by.x="cell", by.y="cell")
+
+dat.all.long <-pivot_longer(dat.all, cols = colnames(dat.all)[colnames(dat.all) %in% good.marker], names_to = "target", values_to = "counts")
+
+
+p <-dat.all.long %>%
+  ggplot(aes(x=V1, y=V2, color=counts))+
+  facet_wrap(~target, scales = "free", ncol = 6)+
+  geom_point(alpha=0.5, size=0.2)+
+  scale_color_gradientn(colours=rev(brewer.pal(11, 'Spectral')), name='Counts')+
+  ggtitle('')+
+  theme(strip.background = element_blank(),
+        axis.line=element_blank(),
+        axis.text.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks=element_blank(),
+        axis.title.x=element_blank(),
+        axis.title.y=element_blank(),
+        panel.background=element_blank(),
+        panel.border=element_blank(),
+        panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        plot.background=element_blank(),
+         strip.text = element_text(size=8)) 
+
+##ggsave(filename=file.path(plot_folder, paste("sub_fibro_fibro-Marker_UMAP_p50_NEW.png",sep="")), plot=p, width=16, height=10)
+plot(p)
+```
+
+
+```{r Clustering using Rphenoannoy, fig.width=15, fig.height=15}
+hmcol<-rev(brewer.pal(11,"RdBu"))
+
+#marker.clustering <- good.marker[!good.marker %in% "Pan Cytokeratin + Keratin Epithelial"]
+#cellnb <- 250000
+#subsample <-  colnames(sce)[sample(length(colnames(sce)), cellnb)]
+#sce_sub <- sce[, colnames(sce) %in% subsample]
+
+#set ks for clustering
+#i <- 100
+k <- c(10)
+#i<-30
+for (i in k) {
+    sce_NONtumour$RPmembership <- factor(Rphenoannoy(data = t(assay(sce_NONtumour[rownames(sce_NONtumour) %in% good.marker,],"c_counts_asinh")), k = i)[[2]]$membership)
+    cluster <- paste0("rp_NONtumour_k",i)
+  colnames(colData(sce_NONtumour))[which(names(colData(sce_NONtumour)) == "RPmembership")] <- paste0(cluster)
+  agg_sce <-aggregateAcrossCells(sce_NONtumour, ids=sce_NONtumour[[cluster]], average=TRUE, use_exprs_values="c_counts_asinh_scaled" )
+
+ 
+    scater::plotHeatmap(agg_sce,
+              features = good.marker,
+              #features = all.marker,
+              #features = marker.clustering,
+              exprs_values = "c_counts_asinh_scaled",
+              symmetric = FALSE,
+              zlim=c(0,1),
+              color=rdylbu,
+              sortrowss=FALSE,
+              show_colnames=TRUE,
+              colour_columns_by = c(cluster),
+              main=paste0("Heatmap NON Tumour cells, ",cluster))
+    
+  #save sce clustering
+  saveRDS(sce_NONtumour, file=file.path(data_folder, paste("sce_NONtumour_workingfile.rds",sep="")))
+}
+```
+
+```{r}
+
+colnames(colData(sce_NONtumour))[!colnames(colData(sce_NONtumour)) %in%colnames(colData(tumour_NONtumour))]
+colnames(colData(tumour_NONtumour))[!colnames(colData(tumour_NONtumour)) %in%colnames(colData(sce_NONtumour))]
+
+colnames(colData(sce_NONtumour))
+
+tumour_NONtumour$rp_tumour_k30 <-NULL
+tumour_NONtumour$rp_tumour_k35 <-NULL
+tumour_NONtumour$rp_tumour_k40 <-NULL
+
+tumour_NONtumour$tumour_nontumour <-NULL
+sce_NONtumour$rp_NONtumour_k30 <-NULL
+sce_NONtumour$rp_NONtumour_k10 <-NULL
+sce_NONtumour.final <- cbind(sce_NONtumour, tumour_NONtumour)
+
+sce_NONtumour.final$tumour_nontumour <-"non tumour"
+saveRDS(sce_NONtumour.final, file=file.path(data_folder,"non_tumour", paste("non_tumour_merged.rds",sep="")))
+
+```
+
+#FINAL NON TUMOUR CLUSTERING to distinguish between stroma / immune (and eventual left over tumour cells (which would need to be remerged to the tumour_tumour dataset))
+```{r}
+wd <-dirname(getwd())
+
+data_folder <-(file.path(wd,"sce_objects","non_tumour"))
+sce_NONtumour.final <- readRDS(file=file.path(data_folder,"non_tumour", "non_tumour_merged.rds"))
+sce$RoiID %>% unique %>% length
+
+saveRDS(sce_NONtumour.final, file=file.path(data_folder,"non_tumour", "non_tumour_merged_workingfile.rds"))
+
+```
+
+
+```{r Define good markers, echo=F, warning=F, message=FALSE}
+all.marker <-rownames(sce)
+
+bad.marker <- c("Iridium191","Iridium193","CD11b","Histone H3") 
+good.marker <- all.marker[!all.marker %in% bad.marker]
+print(good.marker)
+```
+
+```{r, sub non tumour, warning=F, message=F, echo=F, eval=F}
+#split cells by ImageNumber
+n_cells_dr <- 1000
+cs <- split(seq_len(ncol(sce_NONtumour.final)), sce_NONtumour.final$RoiID)
+length(unique(sce_NONtumour.final$RoiID))
+#sample 'n_cells_dr' per ImageNumber
+cs <- unlist(lapply(cs, function(u) 
+  sample(u, min(n_cells_dr, length(u)))))
+#sub.test <- sce[,cs]
+sce_NONtumour.final.sub <- sce_NONtumour.final[,cs]
+
+#calculate percentage of cells subsetting results in
+p<-dim(assay(sce_NONtumour.final.sub))[2]/dim(assay(sce_NONtumour.final))[2]*100
+
+#results in % of all cells
+print(paste("Subsetting results in a total number of",dim(assay(
+  sce_NONtumour.final.sub))[2],"cells, which corresponds to",round(p,digits=2), "% of all cells of the original sce." ))
+
+saveRDS(sce_NONtumour.final.sub, file=file.path(data_folder,"non_tumour", paste("non_tumour_merged_sub.rds")))
+```
+
+```{r, load subset, message=FALSE, warning=FALSE, echo=FALSE}
+sce_NONtumour.final.sub <- readRDS(file=file.path(data_folder, paste("non_tumour_merged_sub.rds")))
+```
+
+```{r, calculate umap, warning=F, message=F, echo=F, eval=FALSE}
+p <-c(50)
+
+for(i in p){
+sce_NONtumour.final.sub <- runUMAP(sce_NONtumour.final.sub,
+                 exprs_values = "c_counts_asinh",
+                 name = paste0("UMAP_p", i),
+                 #use_dimred="PCA_20",
+                 n_neighbors = i)
+saveRDS(sce_NONtumour.final.sub, file=file.path(data_folder,"non_tumour", paste("non_tumour_merged_sub.rds")))
+
+}
+saveRDS(sce_NONtumour.final.sub, file=file.path(data_folder,"non_tumour", paste("non_tumour_merged_sub.rds")))
+```
+
+
+**UMAP with Tumour markers**
+```{r,plot umap tumour marker, fig.width=12, fig.height=8, echo=F, message=FALSE,warning=FALSE}
+dat <-as.data.frame(reducedDims(sce_NONtumour.final.sub)$`UMAP_p50`)
+dat$cell <- rownames(dat)
+dat.counts <-as.data.frame(t((assay(sce_NONtumour.final.sub,"c_counts_asinh_scaled"))))
+dat.counts$cell <- rownames(dat.counts)
+dat.all <-merge(dat, dat.counts, by.x="cell", by.y="cell")
+
+dat.all.long <-pivot_longer(dat.all, cols = colnames(dat.all)[colnames(dat.all) %in% good.marker], names_to = "target", values_to = "counts")
+
+
+p <-dat.all.long %>%
+  ggplot(aes(x=V1, y=V2, color=counts))+
+  facet_wrap(~target, scales = "free", ncol = 6)+
+  geom_point(alpha=0.5, size=0.2)+
+  scale_color_gradientn(colours=rev(brewer.pal(11, 'Spectral')), name='Counts')+
+  ggtitle('')+
+  theme(strip.background = element_blank(),
+        axis.line=element_blank(),
+        axis.text.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks=element_blank(),
+        axis.title.x=element_blank(),
+        axis.title.y=element_blank(),
+        panel.background=element_blank(),
+        panel.border=element_blank(),
+        panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        plot.background=element_blank(),
+         strip.text = element_text(size=8)) 
+
+##ggsave(filename=file.path(plot_folder, paste("sub_fibro_fibro-Marker_UMAP_p50_NEW.png",sep="")), plot=p, width=16, height=10)
+plot(p)
+```
+
+
+
+
+```{r Clustering using Rphenoannoy, fig.width=15, fig.height=10}
+hmcol<-rev(brewer.pal(11,"RdBu"))
+rdylbu <-rev(brewer.pal(11,"RdYlBu"))
+
+#marker.clustering <- good.marker[!good.marker %in% "Pan Cytokeratin + Keratin Epithelial"]
+#cellnb <- 250000
+#subsample <-  colnames(sce)[sample(length(colnames(sce)), cellnb)]
+#sce_sub <- sce[, colnames(sce) %in% subsample]
+
+#set ks for clustering
+#i <- 100
+k <- c(10,15,20,30,35)
+i<-10
+for (i in k) {
+#   sce_NONtumour.final$RPmembership <- factor(Rphenoannoy(data = t(assay(sce_NONtumour.final[rownames(sce_NONtumour.final) %in% good.marker,],"c_counts_asinh")), k = i)[[2]]$membership)
+   cluster <- paste0("rp_NONtumour_final_k",i)
+# colnames(colData(sce_NONtumour.final))[which(names(colData(sce_NONtumour.final)) == "RPmembership")] <- paste0(cluster)
+  agg_sce <-aggregateAcrossCells(sce_NONtumour.final, ids=sce_NONtumour.final[[cluster]], average=TRUE, use_exprs_values="c_counts_asinh_scaled" )
+
+ 
+    scater::plotHeatmap(agg_sce,
+              features = good.marker,
+              #features = all.marker,
+              #features = marker.clustering,
+              exprs_values = "c_counts_asinh_scaled",
+              symmetric = FALSE,
+              zlim=c(0,1),
+              color=rdylbu,
+              sortrowss=FALSE,
+              show_colnames=TRUE,
+              colour_columns_by = c(cluster),
+              main=paste0("Heatmap final NON Tumour cells, ",cluster))
+    
+    
+  #save sce clustering
+#saveRDS(sce_NONtumour.final, file=file.path(data_folder,"non_tumour", "non_tumour_merged_workingfile.rds"))
+}
+```
+
+
+```{r}
+#is.tumour <- c(35, 73,66,75,51,53)
+is.immune <- c(23,13,9,24,20,8,30,15,21,11)
+is.stroma <- c(29,4,10,5,18,28,25,3,27,26,12,1,6,31,22,7,14,2)
+is.undef <- c(16,17,19,26)
+
+sce_NONtumour.final$cell_category[sce_NONtumour.final$rp_NONtumour_final_k35 %in% is.immune] <- "immune"
+sce_NONtumour.final$cell_category[sce_NONtumour.final$rp_NONtumour_final_k35 %in% is.stroma] <- "stroma"
+sce_NONtumour.final$cell_category[sce_NONtumour.final$rp_NONtumour_final_k35 %in% is.undef] <- "undefined"
+
+table(sce_NONtumour.final$cell_category)
+
+```
+
+```{r, add clustering results to subset tumour}
+sce_NONtumour.final.sub$rp_NONtumour_final_k35.x <-NULL
+sce_NONtumour.final.sub$rp_NONtumour_final_k35.y <-NULL
+sce_NONtumour.final.sub$cell_category.x <-NULL
+sce_NONtumour.final.sub$cell_category.y <-NULL
+colData(sce_NONtumour.final.sub) %>% colnames
+
+rp_df <- data.frame("CellID"=sce_NONtumour.final$CellID, "rp_NONtumour_final_k35"=sce_NONtumour.final$rp_NONtumour_final_k35,
+                    "cell_category"=sce_NONtumour.final$cell_category)
+
+cur_DF <- as_tibble(colData(sce_NONtumour.final.sub)) %>% left_join(rp_df, by = "CellID") %>% DataFrame()
+all.equal(paste(cur_DF$ImageNumber, cur_DF$CellNumber), paste(sce_NONtumour.final.sub$ImageNumber, sce_NONtumour.final.sub$CellNumber))
+
+colData(sce_NONtumour.final.sub) <- cur_DF
+rownames(colData(sce_NONtumour.final.sub)) <-sce_NONtumour.final.sub$CellID
+```
+
+
+```{r, add clustering results to subset tumour}
+cluster <- "cell_category"
+p <-plotReducedDim(sce_NONtumour.final.sub, "UMAP_p50", colour_by=paste(cluster), text_by = paste(cluster), point_size=0.5,)+labs(x="UMAP-1", y="UMAP-2", title="UMAP") 
+plot(p)
+
+cluster <- "rp_NONtumour_final_k35"
+p <-plotReducedDim(sce_NONtumour.final.sub, "UMAP_p50", colour_by=paste(cluster), text_by = paste(cluster), point_size=0.5,)+labs(x="UMAP-1", y="UMAP-2", title="UMAP")  +scale_color_manual(values=as.vector(glasbey(32)))
+plot(p)
+```
+
+
+
+
+```{r, fig.width=20, fig.height=10}
+cluster <- paste0("rp_NONtumour_final_k",35)
+agg_sce <-aggregateAcrossCells(sce_NONtumour.final, ids=sce_NONtumour.final[[cluster]], average=TRUE, use_exprs_values="c_counts_asinh_scaled" )
+
+ 
+    scater::plotHeatmap(agg_sce,
+              features = good.marker,
+              #features = all.marker,
+              #features = marker.clustering,
+              exprs_values = "c_counts_asinh_scaled",
+              symmetric = FALSE,
+              zlim=c(0,1),
+              color=rdylbu,
+              sortrowss=FALSE,
+              show_colnames=TRUE,
+              color_columns_by = c("cell_category"),
+              main=paste0("Heatmap final NON Tumour cells, ",cluster))
+```
+
+```{r}
+saveRDS(sce_NONtumour.final, file=file.path(data_folder,"non_tumour", "non_tumour_merged_workingfile.rds"))
+
+#sce_NONtumour.final_TUMOUR <- sce_NONtumour.final[,sce_NONtumour.final$cell_category=="tumour"]
+sce_NONtumour.final_IMMUNE <- sce_NONtumour.final[,sce_NONtumour.final$cell_category=="immune"]
+sce_NONtumour.final_STROMA <- sce_NONtumour.final[,sce_NONtumour.final$cell_category=="stroma"]
+sce_NONtumour.final_UNDEF <- sce_NONtumour.final[,sce_NONtumour.final$cell_category=="undefined"]
+
+#saveRDS(sce_NONtumour.final_TUMOUR, file=file.path(data_folder,"non_tumour", "merge_all-NONtumour_final_workingfile_TUMOUR.rds"))
+saveRDS(sce_NONtumour.final_IMMUNE, file=file.path(data_folder,"non_tumour", "nonTumour_Immune.rds"))
+saveRDS(sce_NONtumour.final_STROMA, file=file.path(data_folder,"non_tumour", "nonTumour_stroma.rds"))
+saveRDS(sce_NONtumour.final_UNDEF, file=file.path(data_folder,"non_tumour", "nonTumour_undefined.rds"))
+
+saveRDS(sce_NONtumour.final_IMMUNE, file=file.path(data_folder,"immune", "nonTumour_Immune.rds"))
+saveRDS(sce_NONtumour.final_STROMA, file=file.path(data_folder,"stroma", "nonTumour_stroma.rds"))
+saveRDS(sce_NONtumour.final_UNDEF, file=file.path(data_folder,"non_tumour", "nonTumour_undefined.rds"))
+```

@@ -1,0 +1,833 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r}
+library(cytomapper)
+```
+
+
+```{r}
+wd <- getwd() %>% dirname
+data_folder <- file.path(wd, "cytomapper")
+tiff_folder <- file.path(wd, "cytomapper", "tiff")
+```
+
+
+```{r, fig.width=12, fig.height=12}
+panel <- read.csv(file=file.path(data_folder, paste('LC_BC_fibro_study_final panel.csv')))
+images_075 <- loadImages(tiff_folder, pattern ="20201013_LC_BC-Fibro_TBB075")
+
+#images_075 <- loadImages(tiff_folder, pattern ="20201013_LC_BC-Fibro_TBB075_s0_p8_r6_a6_ac_")
+
+library(DT)
+#loads panel
+#DT::datatable(panel)
+
+channel_metal <- read.csv(file.path(data_folder, paste("20201013_LC_BC-Fibro_TBB075_s0_p8_r1_a1_ac_full.csv")), header=FALSE)
+
+panel <- panel[match(channel_metal[,1], panel$Metal.Tag),]
+rownames(panel) <-panel$Clean_Target
+channelNumber <- as.numeric(sub("^.*_c", "", colnames(counts)))
+
+channelNames(images_075) <- panel$Clean_Target
+#images_075 <- scaleImages(images_075, 2^16-1)
+#images_075 <- normalize(images_075)
+
+
+cur_images_075 <- normalize(images_075)
+cur_images_075 <- normalize(cur_images_075, inputRange = c(0, 0.5))
+plotPixels(cur_images_075, colour_by = c("Keratin Epithelial", "Iridium193", "aSMA"))
+mcols(cur_images_075)$ImageNb <- c("1","2","3","4","5","6","7","8","9")
+
+pdf(file=file.path(data_folder, "plots","TBB075_tumour.pdf"))
+plotPixels(cur_images_075,mask = masks_075,
+          object = sce.075[,sce.075$celltype=="Tumour"], img_id = "ImageNb",
+          cell_id = "CellNumber",
+            colour_by = c("Keratin Epithelial", "Iridium193", "aSMA"),
+           outline_by = "celltype",
+          colour=list(celltype = c(Tumour = "white"),
+                      Iridium193=c("black","blue"),
+                      aSMA=c("black","green"),
+                      `Keratin Epithelial`=c("black","red")),
+            bcg = list(`Keratin Epithelial` = c(0,2,0.2),
+                       aSMA =c(0,10,0.5),
+                       Iridium193 =c(0,4,0.4)
+                        ),
+          thick=T)
+dev.off()
+
+
+pdf(file=file.path(data_folder, "plots","TBB075_CAFs.pdf"))
+plotPixels(cur_images_075,mask = masks_075,
+          object = sce.075[,sce.075$celltype=="CAF"], img_id = "ImageNb",
+          cell_id = "CellNumber",
+            colour_by = c("Keratin Epithelial", "Iridium193", "aSMA"),
+           outline_by = "celltype",
+          colour=list(celltype = c(CAF = "white"),
+                      Iridium193=c("black","blue"),
+                      aSMA=c("black","green"),
+                      `Keratin Epithelial`=c("black","red")),
+            bcg = list(`Keratin Epithelial` = c(0,2,0.2),
+                       aSMA =c(0,10,0.5),
+                       Iridium193 =c(0,4,0.4)
+                        ),
+          thick=T)
+dev.off()
+
+pdf(file=file.path(data_folder, "plots","TBB075_vCAF.pdf"))
+plotPixels(cur_images[],mask = masks_075,
+          object = sce.075[,sce.075$cell_subtype=="CD146_CAF"], img_id = "ImageNb",
+          cell_id = "CellNumber",
+            colour_by = c("Keratin Epithelial", "Iridium193", "CD146"),
+           outline_by = "cell_subtype",
+          colour=list(cell_subtype = c(CD146_CAF = "white"),
+                      Iridium193=c("black","blue"),
+                      CD146=c("black","green"),
+                      `Keratin Epithelial`=c("black","red")),
+            bcg = list(`Keratin Epithelial` = c(0,2,0.2),
+                       CD146 =c(0,3,1),
+                       Iridium193 =c(0,4,0.4)),
+          thick=T)
+dev.off()
+
+
+
+#Iridium with segmentation masks
+pdf(file=file.path(wd,"cytomapper","plots","IR_TBB075_cellmask_overlay.pdf"))
+plotPixels(cur_images_075,mask = masks_075,
+          object = sce.075, img_id = "ImageNb",
+          cell_id = "CellNumber",
+            colour_by = c("Iridium193"),
+           outline_by = "celltype",
+          colour=list(celltype = c(Tumour = "white",
+                                   CAF="white",
+                                   Immune= "white",
+                                   Endothelial ="white",
+                                   other="white"),
+                      Iridium193=c("black","blue")),
+            bcg = list(
+                       Iridium193 =c(0,5,0.3)
+                        ),
+          thick=T)
+dev.off()
+
+#ir sma panck all cells
+pdf(file=file.path(wd,"cytomapper", "plots","TBB075_IR_SMA_PanCK_Cells.pdf"))
+plotPixels(cur_images_075,mask = masks_075,
+          object = sce.075, img_id = "ImageNb",
+          cell_id = "CellNumber",
+            colour_by = c("Keratin Epithelial", "Iridium193", "aSMA"),
+           outline_by = "celltype",
+          colour=list(celltype = c(Tumour = "white",
+                                   CAF="white",
+                                   Immune= "white",
+                                   Endothelial ="white",
+                                   other="white"),
+                      Iridium193=c("black","blue"),
+                      aSMA=c("black","green"),
+                      `Keratin Epithelial`=c("black","red")),
+            bcg = list(`Keratin Epithelial` = c(0,2,0.2),
+                       aSMA =c(0,10,0.5),
+                       Iridium193 =c(0,4,0.4)
+                        ),
+          thick=T)
+dev.off()
+```
+
+
+```{r}
+masks_075 <- loadImages(path.to.images, pattern = "20201013_LC_BC-Fibro_TBB075_") 
+mcols(masks_075)$ImageNb <- c("1","2","3","4","5","6","7","8","9")
+masks_075 <- scaleImages(masks_075, 2^16-1)
+
+
+mcols(images_075)$ImageNb <- c("1","2","3","4","5","6","7","8","9")
+#images_075 <- scaleImages(images_075, 2^16-1)
+
+
+
+plotPixels(images_075, mask = masks_075,
+            object = sce.075, img_id = "ImageNb",
+            cell_id = "CellNumber",
+            colour_by = c("Keratin Epithelial", "Iridium193", "aSMA"),
+            outline_by = "celltype")
+
+
+data("pancreasImages")
+# Increase contrast for the CD99 and CDH channel
+plotPixels(images_075,
+            colour_by = c("Keratin Epithelial", "Iridium193", "aSMA"),
+            bcg = list(`Keratin Epithelial` = c(0,2,1),
+                        aSMA = c(0,2,1)))
+
+
+```
+
+```{r sample102}
+all_masks <- loadImages(path.to.images, pattern = "20201016_LC_BC-Fibro_TBB102_s0_p15_") 
+mcols(all_masks)$ImageNb <- c("1","2","3","4","5","6","7","8")
+all_masks <- scaleImages(all_masks, 2^16-1)
+head(unique(as.numeric(all_masks[[1]])))
+
+
+sce.102 <-all.sce[, all.sce$SampleID=="TBB102"]
+
+sce.102$acID %>% unique
+sce.102$ImageNb <- sce.102$acID
+
+pdf(file=file.path(plot_folder, "sample_102_celltype.pdf"))
+plotCells(mask = all_masks, object = sce.102,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "celltype")
+dev.off()
+
+pdf(file=file.path(plot_folder, "sample_102_cellsubtype.pdf"))
+
+plotCells(mask = all_masks, object = sce.102,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "cell_subtype")
+dev.off()
+```
+
+
+```{r sample75}
+masks_075 <- loadImages(path.to.images, pattern = "20201013_LC_BC-Fibro_TBB075_") 
+mcols(masks_075)$ImageNb <- c("1","2","3","4","5","6","7","8","9")
+masks_075 <- scaleImages(masks_075, 2^16-1)
+head(unique(as.numeric(masks_075[[1]])))
+
+
+sce.075 <-all.sce[, all.sce$SampleID=="TBB075"]
+
+sce.075$acID %>% unique
+sce.075$ImageNb <- sce.075$acID
+
+
+plotCells(mask = masks_075, object = sce.075,
+            cell_id = "CellNumber", img_id = "ImageNb", colour_by = "Keratin Epithelial",
+            outline_by = "celltype")
+
+
+
+pdf(file=file.path(plot_folder, "sample_075_celltype.pdf"))
+plotCells(mask = masks_075, object = sce.075,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "celltype")
+dev.off()
+
+pdf(file=file.path(plot_folder, "sample_075_cellsubtype.pdf"))
+
+plotCells(mask = all_masks, object = sce.075,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "cell_subtype")
+dev.off()
+```
+
+
+```{r sample111}
+all_masks <- loadImages(path.to.images, pattern = "LC_BC-Fibro_TBB111_") 
+mcols(all_masks)$ImageNb <- c("1","2","3","4","5","6","7","8")
+all_masks <- scaleImages(all_masks, 2^16-1)
+head(unique(as.numeric(all_masks[[1]])))
+
+
+sce.111 <-all.sce[, all.sce$SampleID=="TBB111"]
+
+sce.111$acID %>% unique
+sce.111$ImageNb <- sce.111$acID
+
+pdf(file=file.path(plot_folder, "sample_111_celltype.pdf"))
+
+plotCells(mask = all_masks, object = sce.111,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "celltype")
+dev.off()
+
+pdf(file=file.path(plot_folder, "sample_111_cellsubtype.pdf"))
+
+plotCells(mask = all_masks, object = sce.111,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "cell_subtype")
+dev.off()
+```
+
+
+```{r sample 129}
+all_masks <- loadImages(path.to.images, pattern = "LC_BC-Fibro_TBB129_") 
+mcols(all_masks)$ImageNb <- c("2","3","4","5","6","7","8","9")
+all_masks <- scaleImages(all_masks, 2^16-1)
+head(unique(as.numeric(all_masks[[1]])))
+
+
+sce.129 <-all.sce[, all.sce$SampleID=="TBB129"]
+
+sce.129$acID %>% unique
+sce.129$ImageNb <- sce.129$acID
+
+pdf(file=file.path(plot_folder, "sample_129_celltype.pdf"))
+
+plotCells(mask = all_masks, object = sce.129,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "celltype")
+dev.off()
+
+pdf(file=file.path(plot_folder, "sample_129_cellsubtype.pdf"))
+
+plotCells(mask = all_masks, object = sce.129,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "cell_subtype")
+dev.off()
+```
+
+
+```{r sample 165}
+masks_165 <- loadImages(path.to.images, pattern = "LC_BC-Fibro_TBB165_") 
+mcols(masks_165)$ImageNb <- c("1","2","3","4","5","6","7","8","9")
+masks_165 <- scaleImages(masks_165, 2^16-1)
+head(unique(as.numeric(masks_165[[1]])))
+
+
+sce.165 <-all.sce[, all.sce$SampleID=="TBB165"]
+
+sce.165$acID %>% unique
+sce.165$ImageNb <- sce.165$acID
+
+pdf(file=file.path(plot_folder, "sample_165_celltype.pdf"))
+
+plotCells(mask = masks_165, object = sce.165,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "celltype")
+dev.off()
+
+pdf(file=file.path(plot_folder, "sample_165_cellsubtype.pdf"))
+
+plotCells(mask = masks_165, object = sce.165,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "cell_subtype")
+dev.off()
+```
+
+```{r, fig.width=12, fig.height=12}
+panel <- read.csv(file=file.path(data_folder, paste('LC_BC_fibro_study_final panel.csv')))
+images_165 <- loadImages(tiff_folder, pattern ="20201019_LC_BC-Fibro_TBB165")
+
+#images_165 <- loadImages(tiff_folder, pattern ="20201013_LC_BC-Fibro_TBB165_s0_p8_r6_a6_ac_")
+
+library(DT)
+#loads panel
+#DT::datatable(panel)
+
+channel_metal <- read.csv(file.path(data_folder, paste("20201013_LC_BC-Fibro_TBB075_s0_p8_r1_a1_ac_full.csv")), header=FALSE)
+
+panel <- panel[match(channel_metal[,1], panel$Metal.Tag),]
+rownames(panel) <-panel$Clean_Target
+channelNumber <- as.numeric(sub("^.*_c", "", colnames(counts)))
+
+channelNames(images_165) <- panel$Clean_Target
+#images_165 <- scaleImages(images_165, 2^16-1)
+#images_165 <- normalize(images_165)
+
+
+cur_images <- normalize(images_165)
+cur_images <- normalize(cur_images, inputRange = c(0, 0.5))
+plotPixels(cur_images, colour_by = c("Keratin Epithelial", "Iridium193", "aSMA"))
+mcols(cur_images)$ImageNb <- c("1","2","3","4","5","6","7","8","9")
+
+plotPixels(cur_images,mask = masks_165,
+          object = sce.165[,sce.165$celltype=="Tumour"], img_id = "ImageNb",
+          cell_id = "CellNumber",
+            colour_by = c("Keratin Epithelial", "Iridium193", "aSMA"),
+           outline_by = "celltype",
+          colour=list(celltype = c(Tumour = "white"),
+                      Iridium193=c("black","blue"),
+                      aSMA=c("black","green"),
+                      `Keratin Epithelial`=c("black","red")),
+            bcg = list(`Keratin Epithelial` = c(0,2,0.2),
+                       aSMA =c(0,10,0.5),
+                       Iridium193 =c(0,4,0.4)
+                        ))
+
+
+plotPixels(cur_images,mask = masks_165,
+          object = sce.165[,sce.165$celltype=="CAF"], img_id = "ImageNb",
+          cell_id = "CellNumber",
+            colour_by = c("Keratin Epithelial", "Iridium193", "FAP"),
+           outline_by = "celltype",
+          colour=list(celltype = c(CAF = "white"),
+                      Iridium193=c("black","blue"),
+                      FAP=c("black","green"),
+                      `Keratin Epithelial`=c("black","red")),
+            bcg = list(`Keratin Epithelial` = c(0,2,0.2),
+                       FAP =c(0,5,0.5),
+                       Iridium193 =c(0,4,0.4)
+                        ))
+
+pdf(file=file.path(data_folder, "plots","TBB165_vCAF.pdf"))
+plotPixels(cur_images[],mask = masks_165,
+          object = sce.165[,sce.165$cell_subtype=="CD146_CAF"], img_id = "ImageNb",
+          cell_id = "CellNumber",
+            colour_by = c("Keratin Epithelial", "Iridium193", "CD146"),
+           outline_by = "cell_subtype",
+          colour=list(cell_subtype = c(CD146_CAF = "white"),
+                      Iridium193=c("black","blue"),
+                      CD146=c("black","green"),
+                      `Keratin Epithelial`=c("black","red")),
+            bcg = list(`Keratin Epithelial` = c(0,2,0.2),
+                       CD146 =c(0,3,1),
+                       Iridium193 =c(0,4,0.4)
+                        ), thick=T)
+dev.off()
+
+
+pdf(file=file.path(data_folder, "plots","TBB165_CD10.pdf"))
+plotPixels(cur_images[],mask = masks_165,
+          object = sce.165[,sce.165$cell_subtype=="CD10_CD73CAF"], img_id = "ImageNb",
+          cell_id = "CellNumber",
+            colour_by = c("Keratin Epithelial", "Iridium193", "CD10"),
+           outline_by = "cell_subtype",
+          thick=T,
+          colour=list(cell_subtype = c(CD10_CD73CAF = "white"),
+                      Iridium193=c("black","blue"),
+                      CD10=c("black","green"),
+                      `Keratin Epithelial`=c("black","red")),
+            bcg = list(`Keratin Epithelial` = c(0,2,0.2),
+                       CD10 =c(0,8,1.5),
+                       Iridium193 =c(0,4,0.4)
+                        ))
+dev.off()
+```
+
+
+```{r}
+all_masks <- loadImages(path.to.images, pattern = "LC_BC-Fibro_TBB171_") 
+mcols(all_masks)$ImageNb <- c("1","2","3","4","5","6","7","8")
+all_masks <- scaleImages(all_masks, 2^16-1)
+head(unique(as.numeric(all_masks[[1]])))
+
+
+sce.171 <-all.sce[, all.sce$SampleID=="TBB171"]
+
+sce.171$acID %>% unique
+sce.171$ImageNb <- sce.171$acID
+
+
+
+plotCells(mask = all_masks, object = sce.171,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "celltype")
+
+
+pdf(file=file.path(plot_folder, "sample_171_celltype.pdf"))
+
+plotCells(mask = all_masks, object = sce.171,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "celltype")
+dev.off()
+
+pdf(file=file.path(plot_folder, "sample_171_cellsubtype.pdf"))
+
+plotCells(mask = all_masks, object = sce.171,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "cell_subtype")
+dev.off()
+```
+
+
+```{r}
+all_masks <- loadImages(path.to.images, pattern = "LC_BC-Fibro_TBB212_") 
+mcols(all_masks)$ImageNb <- c("1","10","11","12","13","2","3","4","5","6","7","8","9")
+all_masks <- scaleImages(all_masks, 2^16-1)
+head(unique(as.numeric(all_masks[[1]])))
+
+
+sce.212 <-all.sce[, all.sce$SampleID=="TBB212"]
+
+sce.212$acID %>% unique
+sce.212$ImageNb <- sce.212$acID
+
+pdf(file=file.path(plot_folder, "sample_212_celltype.pdf"))
+
+plotCells(mask = all_masks, object = sce.212,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "celltype")
+dev.off()
+
+pdf(file=file.path(plot_folder, "sample_212_cellsubtype.pdf"))
+
+plotCells(mask = all_masks, object = sce.212,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "cell_subtype")
+dev.off()
+```
+
+
+```{r}
+all_masks <- loadImages(path.to.images, pattern = "LC_BC-Fibro_TBB184_") 
+mcols(all_masks)$ImageNb <- c("1","2","3","4","5","6","7","8")
+all_masks <- scaleImages(all_masks, 2^16-1)
+head(unique(as.numeric(all_masks[[1]])))
+
+
+sce.184 <-all.sce[, all.sce$SampleID=="TBB184"]
+
+sce.184$acID %>% unique
+sce.184$ImageNb <- sce.184$acID
+
+pdf(file=file.path(plot_folder, "sample_184_celltype.pdf"))
+
+plotCells(mask = all_masks, object = sce.184,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "celltype")
+dev.off()
+
+pdf(file=file.path(plot_folder, "sample_184_cellsubtype.pdf"))
+
+plotCells(mask = all_masks, object = sce.184,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "cell_subtype")
+dev.off()
+```
+
+
+```{r}
+all_masks <- loadImages(path.to.images, pattern = "LC_BC-Fibro_TBB035_") 
+mcols(all_masks)$ImageNb <- c("1","2","3","4","5","6","7")
+all_masks <- scaleImages(all_masks, 2^16-1)
+head(unique(as.numeric(all_masks[[1]])))
+
+
+sce.035 <-all.sce[, all.sce$SampleID=="TBB035"]
+
+sce.035$acID %>% unique
+sce.035$ImageNb <- sce.035$acID
+
+pdf(file=file.path(plot_folder, "sample_035_celltype.pdf"))
+
+plotCells(mask = all_masks, object = sce.035,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "celltype")
+dev.off()
+
+pdf(file=file.path(plot_folder, "sample_035_cellsubtype.pdf"))
+
+plotCells(mask = all_masks, object = sce.035,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "cell_subtype")
+dev.off()
+```
+
+
+```{r}
+all_masks <- loadImages(path.to.images, pattern = "LC_BC-Fibro_TBB338_") 
+mcols(all_masks)$ImageNb <- c("1","10","11","12","13","2","3","4","5","6","7","8","9")
+all_masks <- scaleImages(all_masks, 2^16-1)
+head(unique(as.numeric(all_masks[[1]])))
+
+
+sce.338 <-all.sce[, all.sce$SampleID=="TBB338"]
+
+sce.338$acID %>% unique
+sce.338$ImageNb <- sce.338$acID
+
+pdf(file=file.path(plot_folder, "sample_338_celltype.pdf"))
+
+plotCells(mask = all_masks, object = sce.338,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "celltype")
+dev.off()
+
+pdf(file=file.path(plot_folder, "sample_338_cellsubtype.pdf"))
+
+plotCells(mask = all_masks, object = sce.338,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "cell_subtype")
+dev.off()
+```
+
+
+```{r}
+all_masks <- loadImages(path.to.images, pattern = "LC_BC-Fibro_TBB214_") 
+mcols(all_masks)$ImageNb <- c("1","10","11","12","6","7","8","9")
+all_masks <- scaleImages(all_masks, 2^16-1)
+head(unique(as.numeric(all_masks[[1]])))
+
+
+sce.214 <-all.sce[, all.sce$SampleID=="TBB214"]
+
+sce.214$acID %>% unique
+sce.214$ImageNb <- sce.214$acID
+
+pdf(file=file.path(plot_folder, "sample_214_celltype.pdf"))
+
+plotCells(mask = all_masks, object = sce.214,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "celltype")
+dev.off()
+
+pdf(file=file.path(plot_folder, "sample_214_cellsubtype.pdf"))
+
+plotCells(mask = all_masks, object = sce.214,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "cell_subtype")
+dev.off
+```
+
+
+```{r}
+all_masks <- loadImages(path.to.images, pattern = "LC_BC-Fibro_TBB226_") 
+mcols(all_masks)$ImageNb <- c("10","11","12","3","4","5","6","7","8","9")
+all_masks <- scaleImages(all_masks, 2^16-1)
+head(unique(as.numeric(all_masks[[1]])))
+
+
+sce.226 <-all.sce[, all.sce$SampleID=="TBB226"]
+
+sce.226$acID %>% unique
+sce.226$ImageNb <- sce.226$acID
+
+pdf(file=file.path(plot_folder, "sample_226_celltype.pdf"))
+
+plotCells(mask = all_masks, object = sce.226,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "celltype")
+dev.off()
+
+pdf(file=file.path(plot_folder, "sample_226_cellsubtype.pdf"))
+
+plotCells(mask = all_masks, object = sce.226,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "cell_subtype")
+dev.off()
+```
+
+```{r, fig.width=50, fig.height=50}
+wd <- dirname(getwd())
+
+path.to.images <-file.path(wd,"masks")
+
+all_masks <- loadImages(path.to.images, pattern = "20201016_LC_BC-Fibro_TBB102_") 
+mcols(all_masks)$ImageNb <- c("1", "2","3","4","5","6","7","8")
+
+head(unique(as.numeric(all_masks[[1]])))
+
+all_masks <- loadImages(path.to.images, pattern = "20201016_LC_BC-Fibro_TBB102_s0_p15_") 
+mcols(all_masks)$ImageNb <- c("1","2","3","4","5","6","7","8")
+all_masks <- scaleImages(all_masks, 2^16-1)
+head(unique(as.numeric(all_masks[[1]])))
+
+
+sce.102 <-all.sce[, all.sce$SampleID=="TBB102"]
+
+sce.102$acID %>% unique
+sce.102$ImageNb <- sce.102$acID
+
+
+plotCells(mask = all_masks, object = sce.102,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "celltype")
+
+
+plotCells(mask = all_masks, object = sce.102,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "cell_subtype")
+
+plotCells(mask = all_masks, object = sce.102,
+            cell_id = "CellNumber", img_id = "ImageNb",
+          colour_by = "cell_subtype2")
+
+
+plotCells(all_masks, object = tma86_o,
+            img_id = "ImageNb", cell_id = "CellNumber",
+            colour_by = c("Pan Cytokeratin + Keratin Epithelial","SMA"),
+            exprs_values = "c_counts_asinh_scaled")
+
+#rownames(colData(tma86)) <- paste(colData(tma86)$TMA, colData(tma86)$ImageID, colData(tma86)$CellNumber, sep="_")
+plotCells(all_masks, object = tma86,
+            img_id = "ImageNb", cell_id = "CellNumber",
+            colour_by = c("Pan Cytokeratin + Keratin Epithelial","SMA"),
+            exprs_values = "c_counts_asinh_scaled")
+
+plotCells(all_masks, object = tma86,
+            img_id = "ImageNb", cell_id = "CellNumber",
+            colour_by = "CellNumber")
+
+plotCells(all_masks_2, object = tma87,
+            img_id = "ImageNb", cell_id = "CellNumber",
+            colour_by = c("Pan Cytokeratin + Keratin Epithelial","SMA"),
+            exprs_values = "c_counts_asinh_scaled")
+
+path.to.images <-file.path(wd,"mask")
+path.to.images <-file.path(wd,"cytomapper")
+
+all_masks <- loadImages(path.to.images, pattern = "2020121_LC_NSCLC_TMA_87_A") 
+#mcols(all_masks)$ImageNb <- c("1", "2","3")
+#mcols(all_masks)$ImageNb <- c("138")
+mcols(all_masks)$ImageNb <- c("1" ,"10","100","102", "104","105","106","107","108","109", "11","110","111","112","114","115","116","117","118","119","12","121","122" ,"123", "124" ,"125", "126", "127", "128" ,"129" ,"13" , "130" ,"131" ,"132" ,"133" ,"134" ,"135" ,"137", "138", "14" , "15" , "16" , "17" , "18" , "19"  ,"2"   ,"20"  ,"21"  ,"22"  ,"23" , "24" , "25" , "26" , "27" , "28"  ,"29" , "3"  , "30"  ,"31"  ,"32"  ,"33"  ,"34"  ,"36",  "37" , "38" , "39" , "4" ,  "40"  ,"41" , "42" , "43"  ,"44"  ,"45"  ,"46"  ,"47"  ,"48" , "5"  , "50" , "51" , "52" , "53",  "54"  ,"55"  ,"56" , "57"  ,"58" , "59" , "6"   ,"60" , "61" , "63" , "64"  ,"65" , "66" , "67"  ,"68" , "69" , "7" ,  "70" , "71",  "72" , "73" ,"74"  ,"75" , "76" , "77",  "78" , "79" , "8"  , "80"  ,"81"  ,"82"  ,"83" , "85",  "86" , "87"  ,"88" , "89" , "9"   ,"90"  ,"91" , "92" , "93" ,"94"  ,"95"  ,"96" , "97"  ,"98"  ,"99" )
+#mcols(all_masks)$ImageNb <- c(ac_sub$ImageNb)
+head(unique(as.numeric(all_masks[[1]])))
+all_masks <- scaleImages(all_masks, 2^16-1)
+
+tma87 <-sce_87_A[,sce_87_A$acID==1|sce_87_A$acID==2|sce_87_A$acID==3]
+tma87 <-sce_87_A[,sce_87_A$acID==138]
+tma87 <- all.cells[, all.cells$TMA=="87A"]
+
+tma87 <- all.sce_pat.roi[, all.sce_pat.roi$TMA=="87A"]
+
+tma87 <- all.category[, all.category$TMA=="87A"]
+tma87 <-tma87A
+tma87$ImageNb <- tma87$acID
+
+#tma87 <-sce_87_A
+tma87$ImageNb <- tma87$acID
+pdf(file=file.path("/mnt/lena_processed2/NSCLC_NEW/plots_cytomapper","panCK_SMA expression_87A_allCells_Categorised.pdf"), width=20, height=20)
+p1<-plotCells(all_masks, object = tma87,
+            img_id = "ImageNb", cell_id = "CellNumber",
+            colour_by = c("Pan Cytokeratin + Keratin Epithelial","SMA"),
+            exprs_values = "c_counts_asinh_scaled", return_plot = TRUE)
+dev.off()
+
+pdf(file=file.path("/mnt/lena_processed2/NSCLC_NEW/plots_cytomapper","87A_allCells_Categorised.pdf"), width=20, height=20)
+p2 <-plotCells(all_masks, object = tma87,
+            img_id = "ImageNb", cell_id = "CellNumber",
+            colour_by = "cell_category",
+            colour = list(cell_category = c("Tumour"="red","Immune"="blue","T cell"="blue","vessel"="yellow", "Fibroblast"="green", "Other"="pink")), return_plot = TRUE)#, "Other"="white"
+dev.off()
+
+
+tma87$mclust <-factor(tma87$mclust)
+plotCells(all_masks, object = tma87,
+            img_id = "ImageNb", cell_id = "CellNumber",
+            colour_by = "mclust",
+            colour = list(mclust = c("1" = "green","2"="red")))
+
+plotCells(all_masks, object = tma87,
+            img_id = "ImageNb", cell_id = "CellNumber",
+            colour_by = c("Pan Cytokeratin + Keratin Epithelial","SMA"),
+            exprs_values = "c_counts_asinh_scaled")
+
+library(cowplot)
+p3 <-plot_grid(ggdraw(p1$plot, clip = "on"), ggdraw(p2$plot))
+file3 <- tempfile("sce87A_tumour-nontumour_panCK_SMA-plots",fileext = ".png")
+save_plot(file3, p3, ncol=2, base_width = 10)
+
+unique(sce_87_A$acID)
+
+all_masks
+names(all_masks)
+ac_info <- str_split(names(all_masks), '_', simplify=TRUE)
+image$Metadata_Description
+head(ac_info)
+cell_meta$BatchID <- ac_info[cell_meta$ImageNumber,1]
+
+ac_sub <- as.data.frame(ac_info) %>%
+            separate( V8,
+              into = c("TMA", "ImageNb"), 
+              sep = "(?<=[A-Za-z])(?=[0-9])",
+              remove=F
+            )
+ac_sub$ImageNb
+as.data.frame(ac_info)
+
+mcols(all_masks)$ImageNb %in% unique(tma87$ImageNb)
+
+
+tma87$Distance <- tma87$Compartment
+tma87$Distance[tma87$Compartment <(0) & tma87$Compartment >(-30)] <- "-10 - 0"
+tma87$Distance[tma87$Compartment <=(-30) & tma87$Compartment >(-60)] <- "-10 - -20"
+tma87$Distance[tma87$Compartment <=(-60) & tma87$Compartment >(-90)] <- "-20 - -30"
+tma87$Distance[tma87$Compartment <=(-90) & tma87$Compartment >(-120)] <- "-30 - -40"
+tma87$Distance[tma87$Compartment <=(-120) & tma87$Compartment >(-150)] <- "-40 - -50"
+tma87$Distance[tma87$Compartment <=(-150) ] <- "< -50"
+tma87$Distance[tma87$Compartment >=0 ] <- ">0"
+tma87$Distance %>% unique
+tma87$Distance <- as.factor(tma87$Distance)
+
+plotCells(all_masks, object = tma87,
+            img_id = "ImageNb", cell_id = "CellNumber",
+            colour_by = "Distance",
+            colour = list(Distance = c("-10 - 0"="red","-10 - -20"="orange","-20 - -30"="yellow","-30 - -40"="green", "-40 - -50"="blue", "< -50"="white",">0"="grey")), return_plot = TRUE)#, "Other"="white"
+```
+
+```{r,fig.width=50, fig.height=50}
+pdf(file=file.path("/mnt/lena_processed2/NSCLC_NEW/plots_cytomapper","FINAL_tumour_vsNONtumour_87A.pdf"), width=20, height=20)
+p2 <-plotCells(all_masks, object = tma87,
+            img_id = "ImageNb", cell_id = "CellNumber",
+            colour_by = "cat",
+            colour = list(cat = c("non_tumour" = "green","tumour"="red")), return_plot = TRUE)
+dev.off()
+
+pdf(file=file.path("/mnt/lena_processed2/NSCLC_NEW/plots_cytomapper","FINAL_tumour_vsNONtumour_87A_cell-category.pdf"), width=20, height=20)
+
+p3<-plotCells(all_masks, object = tma87,
+            img_id = "ImageNb", cell_id = "CellNumber",
+            colour_by = "cell_category",
+            colour = list(cell_category = c("stroma" = "green","tumour"="red", "immune"="blue","undefined"="yellow")),return_plot = TRUE)
+dev.off()
+
+pdf(file=file.path("/mnt/lena_processed2/NSCLC_NEW/plots_cytomapper","Distance_to_tumour_87A.pdf"), width=20, height=20)
+
+tma87$Distance <- tma87$Compartment
+tma87$Distance[tma87$Compartment <(0) & tma87$Compartment >(-30)] <- "-10 - 0"
+tma87$Distance[tma87$Compartment <=(-30) & tma87$Compartment >(-60)] <- "-10 - -20"
+tma87$Distance[tma87$Compartment <=(-60) & tma87$Compartment >(-90)] <- "-20 - -30"
+tma87$Distance[tma87$Compartment <=(-90) & tma87$Compartment >(-120)] <- "-30 - -40"
+tma87$Distance[tma87$Compartment <=(-120) & tma87$Compartment >(-150)] <- "-40 - -50"
+tma87$Distance[tma87$Compartment <=(-150) ] <- "< -50"
+tma87$Distance[tma87$Compartment >=0 ] <- ">0"
+tma87$Distance %>% unique
+tma87$Distance <- as.factor(tma87$Distance)
+
+p <-plotCells(all_masks, object = tma87,
+            img_id = "ImageNb", cell_id = "CellNumber",
+            colour_by = "Distance",
+            colour = list(Distance = c("-10 - 0"="red","-10 - -20"="orange","-20 - -30"="yellow","-30 - -40"="green", "-40 - -50"="blue", "< -50"="purple",">0"="grey")), return_plot = TRUE)#, "Other"="white"
+dev.off()
+```
+```{r, fig.width=50, fig.height=50}
+path.to.images <-file.path(wd,"mask")
+all_masks <- loadImages(path.to.images, pattern = "2020121_LC_NSCLC_TMA_87_A") 
+mcols(all_masks)$ImageNb <- c("1" ,"10","100","102", "104","105","106","107","108","109", "11","110","111","112","114","115","116","117","118","119","12","121","122" ,"123", "124" ,"125", "126", "127", "128" ,"129" ,"13" , "130" ,"131" ,"132" ,"133" ,"134" ,"135" ,"137", "138", "14" , "15" , "16" , "17" , "18" , "19"  ,"2"   ,"20"  ,"21"  ,"22"  ,"23" , "24" , "25" , "26" , "27" , "28"  ,"29" , "3"  , "30"  ,"31"  ,"32"  ,"33"  ,"34"  ,"36",  "37" , "38" , "39" , "4" ,  "40"  ,"41" , "42" , "43"  ,"44"  ,"45"  ,"46"  ,"47"  ,"48" , "5"  , "50" , "51" , "52" , "53",  "54"  ,"55"  ,"56" , "57"  ,"58" , "59" , "6"   ,"60" , "61" , "63" , "64"  ,"65" , "66" , "67"  ,"68" , "69" , "7" ,  "70" , "71",  "72" , "73" ,"74"  ,"75" , "76" , "77",  "78" , "79" , "8"  , "80"  ,"81"  ,"82"  ,"83" , "85",  "86" , "87"  ,"88" , "89" , "9"   ,"90"  ,"91" , "92" , "93" ,"94"  ,"95"  ,"96" , "97"  ,"98"  ,"99" )
+#mcols(all_masks)$ImageNb <- c(ac_sub$ImageNb)
+head(unique(as.numeric(all_masks[[1]])))
+all_masks <- scaleImages(all_masks, 2^16-1)
+
+tma87 <- all.filtered[, all.filtered$TMA=="87A"]
+tma87 <- all.pat.roi[, all.pat.roi$TMA=="87A"]
+tma87 <- all.sce[, all.sce$TMA=="87A"]
+
+tma87$ImageNb <- tma87$acID
+
+
+#pdf(file=file.path("/mnt/lena_processed2/NSCLC_NEW/plots_cytomapper","panCK_SMA expression_87A_allCells_Categorised.pdf"), width=20, height=20)
+p1<-plotCells(all_masks, object = tma87,
+            img_id = "ImageNb", cell_id = "CellNumber",
+            colour_by = c("Pan Cytokeratin + Keratin Epithelial","SMA"),
+            exprs_values = "c_counts_asinh_scaled", return_plot = TRUE)
+#dev.off()
+
+#pdf(file=file.path("/mnt/lena_processed2/NSCLC_NEW/plots_cytomapper","87A_allCells_Categorised.pdf"), width=20, height=20)
+p2 <-plotCells(all_masks, object = tma87,
+            img_id = "ImageNb", cell_id = "CellNumber",
+            colour_by = "cell_category",
+            colour = list(cell_category = c("Tumour"="red","Immune"="blue","T cell"="blue","vessel"="yellow", "Fibroblast"="green")), return_plot = TRUE)
+#dev.off()
+
+pdf(file=file.path("/mnt/lena_processed2/NSCLC_NEW/plots_cytomapper","87A_tumour_stroma_Masks.pdf"), width=20, height=20)
+
+p3 <-plotCells(all_masks, object = tma87,
+            img_id = "ImageNb", cell_id = "CellNumber",
+            colour_by = "Mask",
+            colour = list(Mask = c("tumour"="red","stroma"="green")), return_plot = TRUE)
+dev.off()
+
+```
+
+```{r, fig.width=50, fig.height=50}
+tma87$Mask <- ifelse(tma87$Compartment > 0, "tumour","stroma")
+p3 <-plotCells(all_masks, object = tma87,
+            img_id = "ImageNb", cell_id = "CellNumber",
+            colour_by = "Mask",
+            colour = list(Mask = c("tumour"="red","stroma"="green")), return_plot = TRUE)
+```
+

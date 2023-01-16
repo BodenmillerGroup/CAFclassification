@@ -1,0 +1,772 @@
+title: "R Notebook - classify tumour non tumour using glm() per TMA Block (86_A, 87_B...)"
+output: html_notebook
+---
+
+```{r, import libraries}
+library(igraph)
+library(SingleCellExperiment)
+library(S4Vectors)
+library(stringr)
+library(DT)
+
+library(dplyr)
+library(tidyr)
+library(mclust)
+library(ggplot2)
+library(RColorBrewer)
+library(scater)
+set.seed(101100)
+```
+
+```{r, Set wd and load data}
+#set working directory 
+wd <-"/mnt"
+
+data_folder <-(file.path(wd,"lena_processed2","NSCLC_NEW","sce_objects","counts_clinical data"))
+
+sce_86_A <- readRDS(file=file.path(data_folder, "sce_86_A_counts_RAW.rds"))
+sce_86_B <- readRDS(file=file.path(data_folder, "sce_86_B_counts_RAW.rds"))
+sce_86_C <- readRDS(file=file.path(data_folder, "sce_86_C_counts_RAW.rds"))
+
+sce_87_A_c <- readRDS(file=file.path(data_folder, "sce_87_A_counts_RAW.rds"))
+sce_87_B_c <- readRDS(file=file.path(data_folder, "sce_87_B_counts_RAW.rds"))
+sce_87_C_c <- readRDS(file=file.path(data_folder, "sce_87_C_counts_RAW.rds"))
+
+sce_88_A <- readRDS(file=file.path(data_folder, "sce_88_A_counts_RAW.rds"))
+sce_88_B <- readRDS(file=file.path(data_folder, "sce_88_B_counts_RAW.rds"))
+sce_88_C <- readRDS(file=file.path(data_folder, "sce_88_C_counts_RAW.rds"))
+
+sce_175_A <- readRDS(file=file.path(data_folder, "sce_175_A_counts_RAW.rds"))
+sce_175_B <- readRDS(file=file.path(data_folder, "sce_175_B_counts_RAW.rds"))
+sce_175_C <- readRDS(file=file.path(data_folder, "sce_175_C_counts_RAW.rds"))
+
+sce_176_A <- readRDS(file=file.path(data_folder, "sce_176_A_counts_RAW.rds"))
+sce_176_B <- readRDS(file=file.path(data_folder, "sce_176_B_counts_RAW.rds"))
+sce_176_C <- readRDS(file=file.path(data_folder, "sce_176_C_counts_RAW.rds"))
+
+sce_178_A <- readRDS(file=file.path(data_folder, "sce_178_A_counts_RAW.rds"))
+sce_178_B <- readRDS(file=file.path(data_folder, "sce_178_B_counts_RAW.rds"))
+sce_178_C <- readRDS(file=file.path(data_folder, "sce_178_C_counts_RAW.rds"))
+```
+
+```{r}
+tma86 <-cbind(sce_86_A,sce_86_B,sce_86_C)
+saveRDS(tma86,file=file.path(data_folder,"merge_86_sces.rds"))
+rm(sce_86_A,sce_86_B,sce_86_C)
+
+tma87 <-cbind(sce_87_A,sce_87_B,sce_87_C)
+saveRDS(tma87,file=file.path(data_folder,"merge_87_sces.rds"))
+rm(sce_87_A,sce_87_B,sce_87_C)
+
+tma88 <-cbind(sce_88_A,sce_88_B,sce_88_C)
+saveRDS(tma88,file=file.path(data_folder,"merge_88_sces.rds"))
+rm(sce_88_A,sce_88_B,sce_88_C)
+
+tma175 <-cbind(sce_175_A,sce_175_B,sce_175_C)
+saveRDS(tma175,file=file.path(data_folder,"merge_175_sces.rds"))
+rm(sce_175_A,sce_175_B,sce_175_C)
+
+tma176 <-cbind(sce_176_A,sce_176_B,sce_176_C)
+saveRDS(tma176,file=file.path(data_folder,"merge_176_sces.rds"))
+rm(sce_176_A,sce_176_B,sce_176_C)
+
+tma178 <-cbind(sce_178_A,sce_178_B,sce_178_C)
+saveRDS(tma178,file=file.path(data_folder,"merge_178_sces.rds"))
+rm(sce_178_A,sce_178_B,sce_178_C)
+```
+
+```{r}
+tma80s <- cbind(tma86, tma87, tma88)
+saveRDS(tma80s,file=file.path(data_folder,"merge_80s_sces_RAW.rds"))
+rm(tma86, tma87, tma88)
+
+tma170s <- cbind(tma175, tma176, tma178)
+saveRDS(tma170s,file=file.path(data_folder,"merge_170s_sces_RAW.rds"))
+rm(tma175, tma176, tma178)
+
+tma_all <- cbind(tma80s, tma170s)
+saveRDS(tma_all, file=file.path(data_folder, "merge_all_TMAs_sce_RAW.rds"))
+```
+
+#Save data objects into workingfile folder
+```{r}
+data_folder <-(file.path(wd,"lena_processed2","NSCLC_NEW","sce_objects","workingfiles_TMA"))
+
+saveRDS(sce_86_A, file=file.path(data_folder, "sce_86_A_workingfile.rds"))
+saveRDS(sce_86_B, file=file.path(data_folder, "sce_86_B_workingfile.rds"))
+saveRDS(sce_86_C, file=file.path(data_folder, "sce_86_C_workingfile.rds"))
+
+saveRDS(sce_87_A, file=file.path(data_folder, "sce_87_A_workingfile.rds"))
+saveRDS(sce_87_B, file=file.path(data_folder, "sce_87_B_workingfile.rds"))
+saveRDS(sce_87_C, file=file.path(data_folder, "sce_87_C_workingfile.rds"))
+
+saveRDS(sce_88_A, file=file.path(data_folder, "sce_88_A_workingfile.rds"))
+saveRDS(sce_88_B, file=file.path(data_folder, "sce_88_B_workingfile.rds"))
+saveRDS(sce_88_C, file=file.path(data_folder, "sce_88_C_workingfile.rds"))
+
+saveRDS(sce_175_A, file=file.path(data_folder, "sce_175_A_workingfile.rds"))
+saveRDS(sce_175_B, file=file.path(data_folder, "sce_175_B_workingfile.rds"))
+saveRDS(sce_175_C, file=file.path(data_folder, "sce_175_C_workingfile.rds"))
+
+saveRDS(sce_176_A, file=file.path(data_folder, "sce_176_A_workingfile.rds"))
+saveRDS(sce_176_B, file=file.path(data_folder, "sce_176_B_workingfile.rds"))
+saveRDS(sce_176_C, file=file.path(data_folder, "sce_176_C_workingfile.rds"))
+
+saveRDS(sce_178_A, file=file.path(data_folder, "sce_178_A_workingfile.rds"))
+saveRDS(sce_178_B, file=file.path(data_folder, "sce_178_B_workingfile.rds"))
+saveRDS(sce_178_C, file=file.path(data_folder, "sce_178_C_workingfile.rds"))
+```
+
+```{r, Define good markers, echo=F, warning=F, message=FALSE}
+all.marker <-rownames(sce_86_A)
+
+bad.marker <- c("Iridium_191","Iridium_193","Cadherin-6","Histone H3") 
+good.marker <- all.marker[!all.marker %in% bad.marker]
+print(good.marker)
+```
+
+#GLM per TmaBlock separating cells into tumour/non-tumour
+#86
+```{r, glm tumour non tumour 86A}
+dat.counts <-as.data.frame(t((assay(sce_86_A,"c_counts_asinh"))))
+dat.counts$CellID <- rownames(dat.counts)
+dat.counts.panCK <- dat.counts %>% select(CellID, `Pan Cytokeratin + Keratin Epithelial`)
+
+ggplot(dat.counts.panCK, aes(x=`Pan Cytokeratin + Keratin Epithelial`)) + 
+  geom_density()
+
+glm.86.A <-Mclust(dat.counts.panCK$`Pan Cytokeratin + Keratin Epithelial`,G=2)
+#plot(glm.86.A)
+table(glm.86.A$classification)
+
+sce_86_A$mclust <- glm.86.A$classification
+```
+
+```{r, glm tumour non tumour 86B}
+dat.counts <-as.data.frame(t((assay(sce_86_B,"c_counts_asinh"))))
+dat.counts$CellID <- rownames(dat.counts)
+dat.counts.panCK <- dat.counts %>% select(CellID, `Pan Cytokeratin + Keratin Epithelial`)
+
+ggplot(dat.counts.panCK, aes(x=`Pan Cytokeratin + Keratin Epithelial`)) + 
+  geom_density()
+
+glm.86.B <-Mclust(dat.counts.panCK$`Pan Cytokeratin + Keratin Epithelial`,G=2)
+#plot(glm.86.B)
+table(glm.86.B$classification)
+
+sce_86_B$mclust <- glm.86.B$classification
+```
+
+```{r, glm tumour non tumour 86C}
+dat.counts <-as.data.frame(t((assay(sce_86_C,"c_counts_asinh"))))
+dat.counts$CellID <- rownames(dat.counts)
+dat.counts.panCK <- dat.counts %>% select(CellID, `Pan Cytokeratin + Keratin Epithelial`)
+
+ggplot(dat.counts.panCK, aes(x=`Pan Cytokeratin + Keratin Epithelial`)) + 
+  geom_density()
+
+glm.86.C <-Mclust(dat.counts.panCK$`Pan Cytokeratin + Keratin Epithelial`,G=2)
+#plot(glm.86.C)
+table(glm.86.C$classification)
+
+sce_86_C$mclust <- glm.86.C$classification
+```
+#87
+```{r, glm tumour non tumour 87A}
+dat.counts <-as.data.frame(t((assay(sce_87_A,"c_counts_asinh"))))
+dat.counts$CellID <- rownames(dat.counts)
+dat.counts.panCK <- dat.counts %>% select(CellID, `Pan Cytokeratin + Keratin Epithelial`)
+
+ggplot(dat.counts.panCK, aes(x=`Pan Cytokeratin + Keratin Epithelial`)) + 
+  geom_density()
+
+glm.87.A <-Mclust(dat.counts.panCK$`Pan Cytokeratin + Keratin Epithelial`,G=2)
+#plot(glm.87.A)
+table(glm.87.A$classification)
+
+sce_87_A$mclust <- glm.87.A$classification
+```
+
+```{r, glm tumour non tumour 87B}
+dat.counts <-as.data.frame(t((assay(sce_87_B,"c_counts_asinh"))))
+dat.counts$CellID <- rownames(dat.counts)
+dat.counts.panCK <- dat.counts %>% select(CellID, `Pan Cytokeratin + Keratin Epithelial`)
+
+ggplot(dat.counts.panCK, aes(x=`Pan Cytokeratin + Keratin Epithelial`)) + 
+  geom_density()
+
+glm.87.B <-Mclust(dat.counts.panCK$`Pan Cytokeratin + Keratin Epithelial`,G=2)
+#plot(glm.87.B)
+table(glm.87.B$classification)
+
+sce_87_B$mclust <- glm.87.B$classification
+```
+
+```{r, glm tumour non tumour 87C}
+dat.counts <-as.data.frame(t((assay(sce_87_C,"c_counts_asinh"))))
+dat.counts$CellID <- rownames(dat.counts)
+dat.counts.panCK <- dat.counts %>% select(CellID, `Pan Cytokeratin + Keratin Epithelial`)
+
+ggplot(dat.counts.panCK, aes(x=`Pan Cytokeratin + Keratin Epithelial`)) + 
+  geom_density()
+
+glm.87.C <-Mclust(dat.counts.panCK$`Pan Cytokeratin + Keratin Epithelial`,G=2)
+#plot(glm.87.C)
+table(glm.87.C$classification)
+
+sce_87_C$mclust <- glm.87.C$classification
+```
+
+#88
+```{r, glm tumour non tumour 88A}
+dat.counts <-as.data.frame(t((assay(sce_88_A,"c_counts_asinh"))))
+dat.counts$CellID <- rownames(dat.counts)
+dat.counts.panCK <- dat.counts %>% select(CellID, `Pan Cytokeratin + Keratin Epithelial`)
+
+ggplot(dat.counts.panCK, aes(x=`Pan Cytokeratin + Keratin Epithelial`)) + 
+  geom_density()
+
+glm.88.A <-Mclust(dat.counts.panCK$`Pan Cytokeratin + Keratin Epithelial`,G=2)
+#plot(glm.88.A)
+table(glm.88.A$classification)
+
+sce_88_A$mclust <- glm.88.A$classification
+```
+
+```{r, glm tumour non tumour 88B}
+dat.counts <-as.data.frame(t((assay(sce_88_B,"c_counts_asinh"))))
+dat.counts$CellID <- rownames(dat.counts)
+dat.counts.panCK <- dat.counts %>% select(CellID, `Pan Cytokeratin + Keratin Epithelial`)
+
+ggplot(dat.counts.panCK, aes(x=`Pan Cytokeratin + Keratin Epithelial`)) + 
+  geom_density()
+
+glm.88.B <-Mclust(dat.counts.panCK$`Pan Cytokeratin + Keratin Epithelial`,G=2)
+#plot(glm.88.B)
+table(glm.88.B$classification)
+
+sce_88_B$mclust <- glm.88.B$classification
+```
+
+```{r, glm tumour non tumour 88C}
+dat.counts <-as.data.frame(t((assay(sce_88_C,"c_counts_asinh"))))
+dat.counts$CellID <- rownames(dat.counts)
+dat.counts.panCK <- dat.counts %>% select(CellID, `Pan Cytokeratin + Keratin Epithelial`)
+
+ggplot(dat.counts.panCK, aes(x=`Pan Cytokeratin + Keratin Epithelial`)) + 
+  geom_density()
+
+glm.88.C <-Mclust(dat.counts.panCK$`Pan Cytokeratin + Keratin Epithelial`,G=2)
+#plot(glm.88.C)
+table(glm.88.C$classification)
+
+sce_88_C$mclust <- glm.88.C$classification
+```
+
+#175
+```{r, glm tumour non tumour 175A}
+dat.counts <-as.data.frame(t((assay(sce_175_A,"c_counts_asinh"))))
+dat.counts$CellID <- rownames(dat.counts)
+dat.counts.panCK <- dat.counts %>% select(CellID, `Pan Cytokeratin + Keratin Epithelial`)
+
+ggplot(dat.counts.panCK, aes(x=`Pan Cytokeratin + Keratin Epithelial`)) + 
+  geom_density()
+
+glm.175.A <-Mclust(dat.counts.panCK$`Pan Cytokeratin + Keratin Epithelial`,G=2)
+#plot(glm.175.A)
+table(glm.175.A$classification)
+
+sce_175_A$mclust <- glm.175.A$classification
+```
+
+```{r, glm tumour non tumour 175B}
+dat.counts <-as.data.frame(t((assay(sce_175_B,"c_counts_asinh"))))
+dat.counts$CellID <- rownames(dat.counts)
+dat.counts.panCK <- dat.counts %>% select(CellID, `Pan Cytokeratin + Keratin Epithelial`)
+
+ggplot(dat.counts.panCK, aes(x=`Pan Cytokeratin + Keratin Epithelial`)) + 
+  geom_density()
+
+glm.175.B <-Mclust(dat.counts.panCK$`Pan Cytokeratin + Keratin Epithelial`,G=2)
+#plot(glm.175.B)
+table(glm.175.B$classification)
+
+sce_175_B$mclust <- glm.175.B$classification
+```
+
+```{r, glm tumour non tumour 175C}
+dat.counts <-as.data.frame(t((assay(sce_175_C,"c_counts_asinh"))))
+dat.counts$CellID <- rownames(dat.counts)
+dat.counts.panCK <- dat.counts %>% select(CellID, `Pan Cytokeratin + Keratin Epithelial`)
+
+ggplot(dat.counts.panCK, aes(x=`Pan Cytokeratin + Keratin Epithelial`)) + 
+  geom_density()
+
+glm.175.C <-Mclust(dat.counts.panCK$`Pan Cytokeratin + Keratin Epithelial`,G=2)
+#plot(glm.175.C)
+table(glm.175.C$classification)
+
+sce_175_C$mclust <- glm.175.C$classification
+```
+
+#176
+```{r, glm tumour non tumour 176A}
+dat.counts <-as.data.frame(t((assay(sce_176_A,"c_counts_asinh"))))
+dat.counts$CellID <- rownames(dat.counts)
+dat.counts.panCK <- dat.counts %>% select(CellID, `Pan Cytokeratin + Keratin Epithelial`)
+
+ggplot(dat.counts.panCK, aes(x=`Pan Cytokeratin + Keratin Epithelial`)) + 
+  geom_density()
+
+glm.176.A <-Mclust(dat.counts.panCK$`Pan Cytokeratin + Keratin Epithelial`,G=2)
+#plot(glm.176.A)
+table(glm.176.A$classification)
+
+sce_176_A$mclust <- glm.176.A$classification
+```
+
+```{r, glm tumour non tumour 176B}
+dat.counts <-as.data.frame(t((assay(sce_176_B,"c_counts_asinh"))))
+dat.counts$CellID <- rownames(dat.counts)
+dat.counts.panCK <- dat.counts %>% select(CellID, `Pan Cytokeratin + Keratin Epithelial`)
+
+ggplot(dat.counts.panCK, aes(x=`Pan Cytokeratin + Keratin Epithelial`)) + 
+  geom_density()
+
+glm.176.B <-Mclust(dat.counts.panCK$`Pan Cytokeratin + Keratin Epithelial`,G=2)
+#plot(glm.176.B)
+table(glm.176.B$classification)
+
+sce_176_B$mclust <- glm.176.B$classification
+```
+
+```{r, glm tumour non tumour 176C}
+dat.counts <-as.data.frame(t((assay(sce_176_C,"c_counts_asinh"))))
+dat.counts$CellID <- rownames(dat.counts)
+dat.counts.panCK <- dat.counts %>% select(CellID, `Pan Cytokeratin + Keratin Epithelial`)
+
+ggplot(dat.counts.panCK, aes(x=`Pan Cytokeratin + Keratin Epithelial`)) + 
+  geom_density()
+
+glm.176.C <-Mclust(dat.counts.panCK$`Pan Cytokeratin + Keratin Epithelial`,G=2)
+#plot(glm.176.C)
+table(glm.176.C$classification)
+
+sce_176_C$mclust <- glm.176.C$classification
+```
+
+#178
+```{r, glm tumour non tumour 178A}
+dat.counts <-as.data.frame(t((assay(sce_178_A,"c_counts_asinh"))))
+dat.counts$CellID <- rownames(dat.counts)
+dat.counts.panCK <- dat.counts %>% select(CellID, `Pan Cytokeratin + Keratin Epithelial`)
+
+ggplot(dat.counts.panCK, aes(x=`Pan Cytokeratin + Keratin Epithelial`)) + 
+  geom_density()
+
+glm.178.A <-Mclust(dat.counts.panCK$`Pan Cytokeratin + Keratin Epithelial`,G=2)
+#plot(glm.178.A)
+table(glm.178.A$classification)
+
+sce_178_A$mclust <- glm.178.A$classification
+```
+
+```{r, glm tumour non tumour 178B}
+dat.counts <-as.data.frame(t((assay(sce_178_B,"c_counts_asinh"))))
+dat.counts$CellID <- rownames(dat.counts)
+dat.counts.panCK <- dat.counts %>% select(CellID, `Pan Cytokeratin + Keratin Epithelial`)
+
+ggplot(dat.counts.panCK, aes(x=`Pan Cytokeratin + Keratin Epithelial`)) + 
+  geom_density()
+
+glm.178.B <-Mclust(dat.counts.panCK$`Pan Cytokeratin + Keratin Epithelial`,G=2)
+#plot(glm.178.B)
+table(glm.178.B$classification)
+
+sce_178_B$mclust <- glm.178.B$classification
+```
+
+```{r, glm tumour non tumour 178C, fig.width=12, fig.height=12}
+dat.counts <-as.data.frame(t((assay(sce_178_C,"c_counts_asinh"))))
+dat.counts$CellID <- rownames(dat.counts)
+dat.counts.panCK <- dat.counts %>% select(CellID, `Pan Cytokeratin + Keratin Epithelial`)
+
+ggplot(dat.counts.panCK, aes(x=`Pan Cytokeratin + Keratin Epithelial`)) + 
+  geom_density()
+
+glm.178.C <-Mclust(dat.counts.panCK$`Pan Cytokeratin + Keratin Epithelial`,G=2)
+#plot(glm.178.C)
+table(glm.178.C$classification)
+
+sce_178_C$mclust <- glm.178.C$classification
+```
+
+
+```{r, glm tumour non tumour 178C check expression, fig.width=12, fig.height=12}
+all.marker <-rownames(sce_87_C)
+
+bad.marker <- c("Iridium_191","Iridium_193","Cadherin-6","Histone H3") 
+good.marker <- all.marker[!all.marker %in% bad.marker]
+print(good.marker)
+
+#check expression
+hmcol<-rev(brewer.pal(11,"RdBu"))
+rdylbu <-rev(brewer.pal(11,"RdYlBu"))
+agg_sce <- aggregateAcrossCells(sce_178_C, ids=sce_178_C$mclust, average=TRUE, use_exprs_values="c_counts_asinh_scaled")
+
+scater::plotHeatmap(agg_sce,
+              #features = fibro.marker,
+              features=good.marker,
+              exprs_values = "c_counts_asinh_scaled",
+              #symmetric = FALSE,
+              zlim=c(-0,1),
+              color=rdylbu,
+              sortrowss=FALSE,
+              show_colnames=TRUE,
+              color_columns_by = c("mclust"),
+              main=paste0("Heatmap - tumour no tumour"))
+
+cellnb <- 100000
+subsample <-  colnames(sce_178_C)[sample(length(colnames(sce_178_C)), cellnb)]
+sce_sub <- sce_178_C[, colnames(sce_178_C) %in% subsample]
+p <-50
+for(i in p){
+sce_sub <- runUMAP(sce_sub,
+                 exprs_values = "c_counts_asinh",
+                 name = paste0("UMAP_p", i),
+                 #use_dimred="PCA_20",
+                 n_neighbors = i)
+}
+
+dat <-as.data.frame(reducedDims(sce_sub)$`UMAP_p50`)
+dat$cell <- rownames(dat)
+dat.counts <-as.data.frame(t((assay(sce_sub,"c_counts_asinh_scaled"))))
+dat.counts$cell <- rownames(dat.counts)
+dat.all <-merge(dat, dat.counts, by.x="cell", by.y="cell")
+
+dat.all.long <-pivot_longer(dat.all, cols = colnames(dat.all)[colnames(dat.all) %in% good.marker], names_to = "target", values_to = "counts")
+
+
+p <-dat.all.long %>%
+  ggplot(aes(x=V1, y=V2, color=counts))+
+  facet_wrap(~target, scales = "free", ncol = 6)+
+  geom_point(alpha=0.5, size=0.2)+
+  scale_color_gradientn(colours=rev(brewer.pal(11, 'Spectral')), name='Counts')+
+  ggtitle('')+
+  theme(strip.background = element_blank(),
+        axis.line=element_blank(),
+        axis.text.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks=element_blank(),
+        axis.title.x=element_blank(),
+        axis.title.y=element_blank(),
+        panel.background=element_blank(),
+        panel.border=element_blank(),
+        panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        plot.background=element_blank(),
+         strip.text = element_text(size=8)) 
+
+##ggsave(filename=file.path(plot_folder, paste("sub_fibro_fibro-Marker_UMAP_p50_NEW.png",sep="")), plot=p, width=16, height=10)
+plot(p)
+
+cluster <- "mclust"
+p <-plotReducedDim(sce_sub, "UMAP_p50", colour_by=paste(cluster), text_by = paste(cluster), point_size=0.5,)+labs(x="UMAP-1", y="UMAP-2", title="UMAP") 
+plot(p)
+##ggsave(filename=file.path(plot_folder, paste("sub_Fibro_CAF-Clusters_UMAP_p50.png",sep="")), plot=p)
+```
+
+
+```{r, save mclust results to workingfile}
+data_folder <-(file.path(wd,"lena_processed2","NSCLC_NEW","sce_objects","workingfiles_TMA"))
+
+saveRDS(sce_86_A, file=file.path(data_folder, "sce_86_A_workingfile.rds"))
+saveRDS(sce_86_B, file=file.path(data_folder, "sce_86_B_workingfile.rds"))
+saveRDS(sce_86_C, file=file.path(data_folder, "sce_86_C_workingfile.rds"))
+
+saveRDS(sce_87_A, file=file.path(data_folder, "sce_87_A_workingfile.rds"))
+saveRDS(sce_87_B, file=file.path(data_folder, "sce_87_B_workingfile.rds"))
+saveRDS(sce_87_C, file=file.path(data_folder, "sce_87_C_workingfile.rds"))
+
+saveRDS(sce_88_A, file=file.path(data_folder, "sce_88_A_workingfile.rds"))
+saveRDS(sce_88_B, file=file.path(data_folder, "sce_88_B_workingfile.rds"))
+saveRDS(sce_88_C, file=file.path(data_folder, "sce_88_C_workingfile.rds"))
+
+saveRDS(sce_175_A, file=file.path(data_folder, "sce_175_A_workingfile.rds"))
+saveRDS(sce_175_B, file=file.path(data_folder, "sce_175_B_workingfile.rds"))
+saveRDS(sce_175_C, file=file.path(data_folder, "sce_175_C_workingfile.rds"))
+
+saveRDS(sce_176_A, file=file.path(data_folder, "sce_176_A_workingfile.rds"))
+saveRDS(sce_176_B, file=file.path(data_folder, "sce_176_B_workingfile.rds"))
+saveRDS(sce_176_C, file=file.path(data_folder, "sce_176_C_workingfile.rds"))
+
+saveRDS(sce_178_A, file=file.path(data_folder, "sce_178_A_workingfile.rds"))
+saveRDS(sce_178_B, file=file.path(data_folder, "sce_178_B_workingfile.rds"))
+saveRDS(sce_178_C, file=file.path(data_folder, "sce_178_C_workingfile.rds"))
+```
+#
+```{r, split tumour and non tumour and save out}
+wd <-"/mnt"
+data_folder <-(file.path(wd,"lena_processed2","NSCLC_NEW","sce_objects","tumour_non-tumour_from_TMA"))
+#86
+sce_86_A_tumour <- sce_86_A[, sce_86_A$mclust==2]
+sce_86_A_NONtumour <- sce_86_A[, sce_86_A$mclust==1]
+sce_86_B_tumour <- sce_86_B[, sce_86_B$mclust==2]
+sce_86_B_NONtumour <- sce_86_B[, sce_86_B$mclust==1]
+sce_86_C_tumour <- sce_86_C[, sce_86_C$mclust==2]
+sce_86_C_NONtumour <- sce_86_C[, sce_86_C$mclust==1]
+
+saveRDS(sce_86_A_tumour, file=file.path(data_folder, "sce_86_A_tumour.rds"))
+saveRDS(sce_86_B_tumour, file=file.path(data_folder, "sce_86_B_tumour.rds"))
+saveRDS(sce_86_C_tumour, file=file.path(data_folder, "sce_86_C_tumour.rds"))
+
+saveRDS(sce_86_A_NONtumour, file=file.path(data_folder, "sce_86_A_NON-tumour.rds"))
+saveRDS(sce_86_B_NONtumour, file=file.path(data_folder, "sce_86_B_NON-tumour.rds"))
+saveRDS(sce_86_C_NONtumour, file=file.path(data_folder, "sce_86_C_NON-tumour.rds"))
+
+
+#87
+sce_87_A_tumour <- sce_87_A[, sce_87_A$mclust==2]
+sce_87_A_NONtumour <- sce_87_A[, sce_87_A$mclust==1]
+sce_87_B_tumour <- sce_87_B[, sce_87_B$mclust==2]
+sce_87_B_NONtumour <- sce_87_B[, sce_87_B$mclust==1]
+sce_87_C_tumour <- sce_87_C[, sce_87_C$mclust==2]
+sce_87_C_NONtumour <- sce_87_C[, sce_87_C$mclust==1]
+
+
+saveRDS(sce_87_A_tumour, file=file.path(data_folder, "sce_87_A_tumour.rds"))
+saveRDS(sce_87_B_tumour, file=file.path(data_folder, "sce_87_B_tumour.rds"))
+saveRDS(sce_87_C_tumour, file=file.path(data_folder, "sce_87_C_tumour.rds"))
+
+saveRDS(sce_87_A_NONtumour, file=file.path(data_folder, "sce_87_A_NON-tumour.rds"))
+saveRDS(sce_87_B_NONtumour, file=file.path(data_folder, "sce_87_B_NON-tumour.rds"))
+saveRDS(sce_87_C_NONtumour, file=file.path(data_folder, "sce_87_C_NON-tumour.rds"))
+
+#88
+sce_88_A_tumour <- sce_88_A[, sce_88_A$mclust==2]
+sce_88_A_NONtumour <- sce_88_A[, sce_88_A$mclust==1]
+sce_88_B_tumour <- sce_88_B[, sce_88_B$mclust==2]
+sce_88_B_NONtumour <- sce_88_B[, sce_88_B$mclust==1]
+sce_88_C_tumour <- sce_88_C[, sce_88_C$mclust==2]
+sce_88_C_NONtumour <- sce_88_C[, sce_88_C$mclust==1]
+
+saveRDS(sce_88_A_tumour, file=file.path(data_folder, "sce_88_A_tumour.rds"))
+saveRDS(sce_88_B_tumour, file=file.path(data_folder, "sce_88_B_tumour.rds"))
+saveRDS(sce_88_C_tumour, file=file.path(data_folder, "sce_88_C_tumour.rds"))
+
+saveRDS(sce_88_A_NONtumour, file=file.path(data_folder, "sce_88_A_NON-tumour.rds"))
+saveRDS(sce_88_B_NONtumour, file=file.path(data_folder, "sce_88_B_NON-tumour.rds"))
+saveRDS(sce_88_C_NONtumour, file=file.path(data_folder, "sce_88_C_NON-tumour.rds"))
+
+#175
+sce_175_A_tumour <- sce_175_A[, sce_175_A$mclust==2]
+sce_175_A_NONtumour <- sce_175_A[, sce_175_A$mclust==1]
+sce_175_B_tumour <- sce_175_B[, sce_175_B$mclust==2]
+sce_175_B_NONtumour <- sce_175_B[, sce_175_B$mclust==1]
+sce_175_C_tumour <- sce_175_C[, sce_175_C$mclust==2]
+sce_175_C_NONtumour <- sce_175_C[, sce_175_C$mclust==1]
+
+saveRDS(sce_175_A_tumour, file=file.path(data_folder, "sce_175_A_tumour.rds"))
+saveRDS(sce_175_B_tumour, file=file.path(data_folder, "sce_175_B_tumour.rds"))
+saveRDS(sce_175_C_tumour, file=file.path(data_folder, "sce_175_C_tumour.rds"))
+
+saveRDS(sce_175_A_NONtumour, file=file.path(data_folder, "sce_175_A_NON-tumour.rds"))
+saveRDS(sce_175_B_NONtumour, file=file.path(data_folder, "sce_175_B_NON-tumour.rds"))
+saveRDS(sce_175_C_NONtumour, file=file.path(data_folder, "sce_175_C_NON-tumour.rds"))
+
+#176
+sce_176_A_tumour <- sce_176_A[, sce_176_A$mclust==2]
+sce_176_A_NONtumour <- sce_176_A[, sce_176_A$mclust==1]
+sce_176_B_tumour <- sce_176_B[, sce_176_B$mclust==2]
+sce_176_B_NONtumour <- sce_176_B[, sce_176_B$mclust==1]
+sce_176_C_tumour <- sce_176_C[, sce_176_C$mclust==2]
+sce_176_C_NONtumour <- sce_176_C[, sce_176_C$mclust==1]
+
+saveRDS(sce_176_A_tumour, file=file.path(data_folder, "sce_176_A_tumour.rds"))
+saveRDS(sce_176_B_tumour, file=file.path(data_folder, "sce_176_B_tumour.rds"))
+saveRDS(sce_176_C_tumour, file=file.path(data_folder, "sce_176_C_tumour.rds"))
+
+saveRDS(sce_176_A_NONtumour, file=file.path(data_folder, "sce_176_A_NON-tumour.rds"))
+saveRDS(sce_176_B_NONtumour, file=file.path(data_folder, "sce_176_B_NON-tumour.rds"))
+saveRDS(sce_176_C_NONtumour, file=file.path(data_folder, "sce_176_C_NON-tumour.rds"))
+
+#178
+sce_178_A_tumour <- sce_178_A[, sce_178_A$mclust==2]
+sce_178_A_NONtumour <- sce_178_A[, sce_178_A$mclust==1]
+sce_178_B_tumour <- sce_178_B[, sce_178_B$mclust==2]
+sce_178_B_NONtumour <- sce_178_B[, sce_178_B$mclust==1]
+sce_178_C_tumour <- sce_178_C[, sce_178_C$mclust==2]
+sce_178_C_NONtumour <- sce_178_C[, sce_178_C$mclust==1]
+
+saveRDS(sce_178_A_tumour, file=file.path(data_folder, "sce_178_A_tumour.rds"))
+saveRDS(sce_178_B_tumour, file=file.path(data_folder, "sce_178_B_tumour.rds"))
+saveRDS(sce_178_C_tumour, file=file.path(data_folder, "sce_178_C_tumour.rds"))
+
+saveRDS(sce_178_A_NONtumour, file=file.path(data_folder, "sce_178_A_NON-tumour.rds"))
+saveRDS(sce_178_B_NONtumour, file=file.path(data_folder, "sce_178_B_NON-tumour.rds"))
+saveRDS(sce_178_C_NONtumour, file=file.path(data_folder, "sce_178_C_NON-tumour.rds"))
+
+
+
+rm(sce_86_A,sce_86_B, sce_86_C,
+   sce_87_A,sce_87_B, sce_87_C,
+   sce_88_A,sce_88_B, sce_88_C,
+   sce_175_A,sce_175_B, sce_175_C,
+   sce_176_A,sce_176_B, sce_176_C,
+   sce_178_A,sce_178_B, sce_178_C)
+
+```
+
+```{r, Set wd and load data}
+#set working directory 
+wd <-"/mnt"
+
+data_folder <-(file.path(wd,"lena_processed2","NSCLC_NEW","sce_objects","tumour_non-tumour_from_TMA"))
+
+sce_86_A_tumour <- readRDS(file=file.path(data_folder, "sce_86_A_tumour.rds"))
+sce_86_B_tumour <- readRDS(file=file.path(data_folder, "sce_86_B_tumour.rds"))
+sce_86_C_tumour <- readRDS(file=file.path(data_folder, "sce_86_C_tumour.rds"))
+
+sce_87_A_tumour <- readRDS(file=file.path(data_folder, "sce_87_A_tumour.rds"))
+sce_87_B_tumour <- readRDS(file=file.path(data_folder, "sce_87_B_tumour.rds"))
+sce_87_C_tumour <- readRDS(file=file.path(data_folder, "sce_87_C_tumour.rds"))
+
+sce_88_A_tumour <- readRDS(file=file.path(data_folder, "sce_88_A_tumour.rds"))
+sce_88_B_tumour <- readRDS(file=file.path(data_folder, "sce_88_B_tumour.rds"))
+sce_88_C_tumour <- readRDS(file=file.path(data_folder, "sce_88_C_tumour.rds"))
+
+sce_175_A_tumour <- readRDS(file=file.path(data_folder, "sce_175_A_tumour.rds"))
+sce_175_B_tumour <- readRDS(file=file.path(data_folder, "sce_175_B_tumour.rds"))
+sce_175_C_tumour <- readRDS(file=file.path(data_folder, "sce_175_C_tumour.rds"))
+
+sce_176_A_tumour <- readRDS(file=file.path(data_folder, "sce_176_A_tumour.rds"))
+sce_176_B_tumour <- readRDS(file=file.path(data_folder, "sce_176_B_tumour.rds"))
+sce_176_C_tumour <- readRDS(file=file.path(data_folder, "sce_176_C_tumour.rds"))
+
+sce_178_A_tumour <- readRDS(file=file.path(data_folder, "sce_178_A_tumour.rds"))
+sce_178_B_tumour <- readRDS(file=file.path(data_folder, "sce_178_B_tumour.rds"))
+sce_178_C_tumour <- readRDS(file=file.path(data_folder, "sce_178_C_tumour.rds"))
+```
+
+#merge data objects into tumour vs non.tumour
+```{r, merge tumour}
+data_folder <-(file.path(wd,"lena_processed2","NSCLC_NEW","sce_objects","tumour_non-tumour_from_TMA"))
+
+all.tumouor <-cbind(sce_86_A_tumour ,
+      sce_86_B_tumour ,
+      sce_86_C_tumour ,
+      sce_87_A_tumour ,
+      sce_87_B_tumour ,
+      sce_87_C_tumour ,
+      sce_88_A_tumour ,
+      sce_88_B_tumour ,
+      sce_88_C_tumour ,
+      sce_175_A_tumour ,
+      sce_175_B_tumour ,
+      sce_175_C_tumour ,
+      sce_176_A_tumour ,
+      sce_176_B_tumour ,
+      sce_176_C_tumour ,
+      sce_178_A_tumour ,
+      sce_178_B_tumour ,
+      sce_178_C_tumour 
+      )
+saveRDS(all.tumouor,file=file.path(data_folder,"merge_all-TUMOUR.rds"))
+metadata(all.tumouor) <-list()
+all.tumour$TMA <-paste(all.tumour$TmaID, all.tumour$TmaBlock)
+rm(sce_86_A_tumour ,
+      sce_86_B_tumour ,
+      sce_86_C_tumour ,
+      sce_87_A_tumour ,
+      sce_87_B_tumour ,
+      sce_87_C_tumour ,
+      sce_88_A_tumour ,
+      sce_88_B_tumour ,
+      sce_88_C_tumour ,
+      sce_175_A_tumour ,
+      sce_175_B_tumour ,
+      sce_175_C_tumour ,
+      sce_176_A_tumour ,
+      sce_176_B_tumour ,
+      sce_176_C_tumour ,
+      sce_178_A_tumour ,
+      sce_178_B_tumour ,
+      sce_178_C_tumour 
+      )
+```
+
+```{r, Set wd and load Non tumour data}
+#set working directory 
+wd <-"/mnt"
+
+data_folder <-(file.path(wd,"lena_processed2","NSCLC_NEW","sce_objects","tumour_non-tumour_from_TMA"))
+
+sce_86_A_NONtumour <- readRDS(file=file.path(data_folder, "sce_86_A_NON-tumour.rds"))
+sce_86_B_NONtumour <- readRDS(file=file.path(data_folder, "sce_86_B_NON-tumour.rds"))
+sce_86_C_NONtumour <- readRDS(file=file.path(data_folder, "sce_86_C_NON-tumour.rds"))
+
+sce_87_A_NONtumour <- readRDS(file=file.path(data_folder, "sce_87_A_NON-tumour.rds"))
+sce_87_B_NONtumour <- readRDS(file=file.path(data_folder, "sce_87_B_NON-tumour.rds"))
+sce_87_C_NONtumour <- readRDS(file=file.path(data_folder, "sce_87_C_NON-tumour.rds"))
+
+sce_88_A_NONtumour <- readRDS(file=file.path(data_folder, "sce_88_A_NON-tumour.rds"))
+sce_88_B_NONtumour <- readRDS(file=file.path(data_folder, "sce_88_B_NON-tumour.rds"))
+sce_88_C_NONtumour <- readRDS(file=file.path(data_folder, "sce_88_C_NON-tumour.rds"))
+
+sce_175_A_NONtumour <- readRDS(file=file.path(data_folder, "sce_175_A_NON-tumour.rds"))
+sce_175_B_NONtumour <- readRDS(file=file.path(data_folder, "sce_175_B_NON-tumour.rds"))
+sce_175_C_NONtumour <- readRDS(file=file.path(data_folder, "sce_175_C_NON-tumour.rds"))
+
+sce_176_A_NONtumour <- readRDS(file=file.path(data_folder, "sce_176_A_NON-tumour.rds"))
+sce_176_B_NONtumour <- readRDS(file=file.path(data_folder, "sce_176_B_NON-tumour.rds"))
+sce_176_C_NONtumour <- readRDS(file=file.path(data_folder, "sce_176_C_NON-tumour.rds"))
+
+sce_178_A_NONtumour <- readRDS(file=file.path(data_folder, "sce_178_A_NON-tumour.rds"))
+sce_178_B_NONtumour <- readRDS(file=file.path(data_folder, "sce_178_B_NON-tumour.rds"))
+sce_178_C_NONtumour <- readRDS(file=file.path(data_folder, "sce_178_C_NON-tumour.rds"))
+```
+
+```{r, merge NON tumour}
+data_folder <-(file.path(wd,"lena_processed2","NSCLC_NEW","sce_objects","tumour_non-tumour_from_TMA"))
+
+all.NONtumouor <-cbind(sce_86_A_NONtumour,
+      sce_86_B_NONtumour,
+      sce_86_C_NONtumour,
+      sce_87_A_NONtumour,
+      sce_87_B_NONtumour,
+      sce_87_C_NONtumour,
+      sce_88_A_NONtumour,
+      sce_88_B_NONtumour,
+      sce_88_C_NONtumour,
+      sce_175_A_NONtumour,
+      sce_175_B_NONtumour,
+      sce_175_C_NONtumour,
+      sce_176_A_NONtumour,
+      sce_176_B_NONtumour,
+      sce_176_C_NONtumour,
+      sce_178_A_NONtumour,
+      sce_178_B_NONtumour,
+      sce_178_C_NONtumour
+      )
+metadata(all.NONtumouor) <-list()
+
+saveRDS(all.NONtumouor,file=file.path(data_folder,"merge_all-NONtumour.rds"))
+rm(sce_86_A_NONtumour,sce_86_B_NONtumour,sce_86_C_NONtumour,sce_87_A_NONtumour,sce_87_B_NONtumour,sce_87_C_NONtumour,sce_88_A_NONtumour,sce_88_B_NONtumour,sce_88_C_NONtumour,sce_175_A_NONtumour,sce_175_B_NONtumour,sce_175_C_NONtumour,sce_176_A_NONtumour,sce_176_B_NONtumour,sce_176_C_NONtumour,sce_178_A_NONtumour,sce_178_B_NONtumour,sce_178_C_NONtumour)
+```
+
+```{r, merge all}
+all.cells <- cbind(all.tumouor, all.NONtumouor)
+saveRDS(all.cells,file=file.path(data_folder, "all-cells_merged.rds"))
+
+all.tumouor$TMA <-paste(all.tumouor$TmaID, all.tumouor$TmaBlock,sep="")
+
+all.NONtumouor$TMA <-paste(all.NONtumouor$TmaID, all.NONtumouor$TmaBlock,sep="")
+
+all.cells$TMA <-paste(all.cells$TmaID, all.cells$TmaBlock,sep="")
+
+table(all.NONtumouor$mclust, all.NONtumouor$TMA) %>% data.frame()
+head(colData(all.NONtumouor))
+
+table(all.tumouor$mclust, all.tumouor$TMA) %>% data.frame()
+```
+

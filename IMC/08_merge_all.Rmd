@@ -1,0 +1,919 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+wd <-dirname(getwd())
+data_folder <- file.path(wd,"sce_objects","FINAL")
+caf.sce <- readRDS(file=file.path(wd,"sce_objects","stroma","CAF","all_fibros_workingfile_clustering.rds"))
+vessel.sce <- readRDS(file=file.path(wd,"sce_objects","stroma","vessel","vessel-VESSEL_workingfile.rds"))
+immune.sce <- readRDS(file=file.path(wd,"sce_objects","immune","FINAL_ALL_IMMUNE_CELLS_incTcellTypes_workingfile.RDS"))
+undefined.sce <- readRDS(file=file.path(wd,"sce_objects","non_tumour","nonTumour_undefined.rds"))
+tumour.sce <- readRDS(file=file.path(wd,"sce_objects","tumour","sce_tumour_tumour.rds"))
+
+#all
+all.sce <-readRDS(file=file.path(data_folder, "all_cells_annotated_workingfile.rds"))
+all.sce <-readRDS(file=file.path(data_folder, "all_cells_annotated_final.rds"))
+
+```
+
+```{r}
+all.marker <-rownames(all.sce)
+
+bad.marker <- c("Iridium191","Iridium193","CD11b","Histone H3") 
+good.marker <- all.marker[!all.marker %in% bad.marker]
+
+all.sce$cell_subtype[all.sce$cell_subtype =="normal"] <- "Epithelial"
+all.sce$cell_subtype[all.sce$cell_subtype =="hypoxic"] <- "hypoxic_Epithelial"
+
+all.sce$cell_subtype[all.sce$cell_subtype2 =="normal"] <- "Epithelial"
+all.sce$cell_subtype[all.sce$cell_subtype2 =="hypoxic"] <- "hypoxic_Epithelial"
+```
+
+```{r}
+caf.sce$celltype <- "CAF"
+caf.sce$cell_subtype <- caf.sce$CAFType
+caf.sce$cell_subtype2 <- caf.sce$CAFsubtype
+
+vessel.sce$celltype <- "Endothelial"
+vessel.sce$cell_subtype <- vessel.sce$vessel_type
+vessel.sce$cell_subtype2 <- vessel.sce$vessel_type
+
+tumour.sce$celltype <- "Tumour"
+tumour.sce$cell_subtype <- tumour.sce$tumour_type
+tumour.sce$cell_subtype2 <- tumour.sce$tumour_type
+
+undefined.sce$celltype <- "Undefined"
+undefined.sce$cell_subtype <- "other"
+undefined.sce$cell_subtype2 <- "other"
+
+immune.sce$celltype <- "Immune"
+immune.sce$cell_subtype <- immune.sce$immune_category
+immune.sce$cell_subtype2 <- immune.sce$TcellType
+
+reducedDims(immune.sce) <-NULL
+reducedDims(caf.sce) <-NULL
+reducedDims(tumour.sce) <-NULL
+reducedDims(vessel.sce) <-NULL
+reducedDims(vessel.sce) <-NULL
+
+assay(caf.sce,"exprs") <-NULL
+
+metadata(immune.sce) <-list()
+metadata(caf.sce) <-list()
+metadata(tumour.sce) <-list()
+metadata(vessel.sce) <-list()
+
+
+saveRDS(caf.sce, file=file.path(data_folder,"FINAL_Fibro.rds"))
+saveRDS(vessel.sce, file=file.path(data_folder,"FINAL_Vessel.rds"))
+saveRDS(tumour.sce, file=file.path(data_folder,"FINAL_Tumour.rds"))
+saveRDS(immune.sce, file=file.path(data_folder,"FINAL_Immune.rds"))
+
+caf.sce$celltype[caf.sce$cell_subtype=="other"] <-"Undefined"
+caf.sce$celltype %>% unique
+
+```
+
+```{r}
+wd <-dirname(getwd())
+data_folder <- file.path(wd,"sce_objects","FINAL")
+caf.sce.f <- readRDS(caf.sce, file=file.path(data_folder,"FINAL_Fibro.rds"))
+vessel.sce.f <- readRDS(file=file.path(data_folder,"FINAL_Vessel.rds"))
+immune.sce.f <- readRDS(file=file.path(data_folder,"FINAL_Immune.rds"))
+undefined.sce.f <- readRDS(file=file.path(wd,"sce_objects","non_tumour","nonTumour_undefined.rds"))
+tumour.sce.f <- readRDS(file=file.path(data_folder,"FINAL_Tumour.rds"))
+```
+#plots umaps and tsnes for everyone
+
+```{r}
+p <-c(10,25,50,75,100)
+
+
+#CAF
+for(i in p){
+caf.sce <- runUMAP(caf.sce,
+                 exprs_values = "c_counts_asinh",
+                 name = paste0("UMAP_p", i),
+                 #use_dimred="PCA_20",
+                 n_neighbors = i)
+saveRDS(caf.sce, file=file.path(data_folder,"FINAL_Fibro.rds"))
+
+}
+
+for(i in p){
+caf.sce <- runTSNE(caf.sce,
+                 exprs_values = "c_counts_asinh",
+                 name = paste0("tSNE_p", i),
+                 #use_dimred="PCA_20",
+                 perplexity = i)
+saveRDS(caf.sce, file=file.path(data_folder,"FINAL_Fibro.rds"))
+}
+
+#vessel
+for(i in p){
+vessel.sce <- runUMAP(vessel.sce,
+                 exprs_values = "c_counts_asinh",
+                 name = paste0("UMAP_p", i),
+                 #use_dimred="PCA_20",
+                 n_neighbors = i)
+saveRDS(vessel.sce, file=file.path(data_folder,"FINAL_Vessel.rds"))
+
+}
+
+for(i in p){
+vessel.sce <- runTSNE(vessel.sce,
+                 exprs_values = "c_counts_asinh",
+                 name = paste0("tSNE_p", i),
+                 #use_dimred="PCA_20",
+                 perplexity = i)
+saveRDS(vessel.sce, file=file.path(data_folder,"FINAL_Vessel.rds"))
+}
+
+#tumour
+for(i in p){
+tumour.sce <- runUMAP(tumour.sce,
+                 exprs_values = "c_counts_asinh",
+                 name = paste0("UMAP_p", i),
+                 #use_dimred="PCA_20",
+                 n_neighbors = i)
+saveRDS(tumour.sce, file=file.path(data_folder,"FINAL_Tumour.rds"))
+
+}
+
+for(i in p){
+tumour.sce <- runTSNE(tumour.sce,
+                 exprs_values = "c_counts_asinh",
+                 name = paste0("tSNE_p", i),
+                 #use_dimred="PCA_20",
+                 perplexity = i)
+saveRDS(tumour.sce, file=file.path(data_folder,"FINAL_Tumour.rds"))
+}
+
+#immune
+for(i in p){
+immune.sce <- runUMAP(immune.sce,
+                 exprs_values = "c_counts_asinh",
+                 name = paste0("UMAP_p", i),
+                 #use_dimred="PCA_20",
+                 n_neighbors = i)
+saveRDS(immune.sce, file=file.path(data_folder,"FINAL_Immune.rds"))
+
+}
+
+for(i in p){
+immune.sce <- runTSNE(immune.sce,
+                 exprs_values = "c_counts_asinh",
+                 name = paste0("tSNE_p", i),
+                 #use_dimred="PCA_20",
+                 perplexity = i)
+saveRDS(immune.sce, file=file.path(data_folder,"FINAL_Immune.rds"))
+}
+```
+
+#plot caf
+```{r,plot umap CAF all good marker, fig.width=12, fig.height=12, echo=F, message=FALSE,warning=FALSE}
+
+u.map <-c("UMAP_p10","UMAP_p25","UMAP_p50","UMAP_p75","UMAP_p100","tSNE_p10","tSNE_p25","tSNE_p50","tSNE_p75","tSNE_p100")
+
+#u.map="UMAP_p50"
+#i="UMAP_p50"
+#i = "tSNE_p100"
+for(i in u.map){
+dat <-as.data.frame(reducedDims(caf.sce)[[i]])
+dat$cell <- rownames(dat)
+dat.counts <-as.data.frame(t((assay(caf.sce,"c_counts_asinh_scaled"))))
+dat.counts$cell <- rownames(dat.counts)
+dat.all <-merge(dat, dat.counts, by.x="cell", by.y="cell")
+
+dat.all.long <-pivot_longer(dat.all, cols = colnames(dat.all)[colnames(dat.all) %in% good.marker], names_to = "target", values_to = "counts")
+
+
+p <-dat.all.long %>%
+  ggplot(aes(x=V1, y=V2, color=counts))+
+  facet_wrap(~target, scales = "free", ncol = 6)+
+  geom_point(alpha=0.5, size=0.2)+
+  scale_color_gradientn(colours=rev(brewer.pal(11, 'Spectral')), name='Counts')+
+  ggtitle('')+
+  theme(strip.background = element_blank(),
+        axis.line=element_blank(),
+        axis.text.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks=element_blank(),
+        axis.title.x=element_blank(),
+        axis.title.y=element_blank(),
+        panel.background=element_blank(),
+        panel.border=element_blank(),
+        panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        plot.background=element_blank(),
+         strip.text = element_text(size=8)) 
+
+#ggsave(filename=file.path(plot_folder, paste0("",i,"CAFmarker",".png",sep="")), plot=p, width=8, height=6)
+plot(p)
+#}
+
+#CAFType
+cluster <- "cell_subtype"
+p <-plotReducedDim(caf.sce, paste(i), colour_by=paste(cluster), point_size=0.5,)+labs(x="UMAP-1", y="UMAP-2", title="UMAP") +scale_color_d3("category20")# text_by = paste(cluster),text_colour ="black",
+plot(p)
+#ggsave(plot=p, file=file.path(plot_folder, paste0("",i,"_CAF_types.png")))
+#CAFSubType
+cluster <- "cell_subtype2"
+p <-plotReducedDim(caf.sce, paste(i), colour_by=paste(cluster), text_by = paste(cluster),text_colour ="red", point_size=0.5,)+labs(x="UMAP-1", y="UMAP-2", title="UMAP")+scale_color_d3("category20") 
+plot(p)
+#ggsave(plot=p, file=file.path(plot_folder, paste0("",i,"_CAF_subtypes.png")))
+
+}
+```
+
+#plot vessel
+**UMAP with good markers**
+```{r,plot umap vessel all good marker, fig.width=12, fig.height=12, echo=F, message=FALSE,warning=FALSE}
+
+u.map <-c("UMAP_p10","UMAP_p25","UMAP_p50","UMAP_p75","UMAP_p100","tSNE_p10","tSNE_p25","tSNE_p50","tSNE_p75","tSNE_p100")
+
+#u.map="UMAP_p50"
+#i="UMAP_p50"
+#i = "tSNE_p100"
+for(i in u.map){
+dat <-as.data.frame(reducedDims(vessel.sce)[[i]])
+dat$cell <- rownames(dat)
+dat.counts <-as.data.frame(t((assay(vessel.sce,"c_counts_asinh_scaled"))))
+dat.counts$cell <- rownames(dat.counts)
+dat.all <-merge(dat, dat.counts, by.x="cell", by.y="cell")
+
+dat.all.long <-pivot_longer(dat.all, cols = colnames(dat.all)[colnames(dat.all) %in% good.marker], names_to = "target", values_to = "counts")
+
+
+p <-dat.all.long %>%
+  ggplot(aes(x=V1, y=V2, color=counts))+
+  facet_wrap(~target, scales = "free", ncol = 6)+
+  geom_point(alpha=0.5, size=0.2)+
+  scale_color_gradientn(colours=rev(brewer.pal(11, 'Spectral')), name='Counts')+
+  ggtitle('')+
+  theme(strip.background = element_blank(),
+        axis.line=element_blank(),
+        axis.text.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks=element_blank(),
+        axis.title.x=element_blank(),
+        axis.title.y=element_blank(),
+        panel.background=element_blank(),
+        panel.border=element_blank(),
+        panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        plot.background=element_blank(),
+         strip.text = element_text(size=8)) 
+
+#ggsave(filename=file.path(plot_folder, paste0("",i,"CAFmarker",".png",sep="")), plot=p, width=8, height=6)
+plot(p)
+#}
+
+cluster <- "cell_subtype"
+p <-plotReducedDim(vessel.sce, paste(i), colour_by=paste(cluster), text_by = paste(cluster),text_colour ="red", point_size=0.5,)+labs(x="UMAP-1", y="UMAP-2", title="UMAP")+scale_color_d3("category20") 
+plot(p)
+#ggsave(plot=p, file=file.path(plot_folder, paste0("",i,"_CAF_subtypes.png")))
+
+}
+library(ggsci)
+```
+
+#plot immune
+**UMAP with good markers**
+```{r,plot umap CAF all good marker, fig.width=12, fig.height=12, echo=F, message=FALSE,warning=FALSE}
+
+u.map <-c("UMAP_p10","UMAP_p25","UMAP_p50","UMAP_p75","UMAP_p100","tSNE_p10","tSNE_p25","tSNE_p50","tSNE_p75","tSNE_p100")
+
+#u.map="UMAP_p50"
+#i="UMAP_p50"
+#i = "tSNE_p100"
+for(i in u.map){
+dat <-as.data.frame(reducedDims(immune.sce)[[i]])
+dat$cell <- rownames(dat)
+dat.counts <-as.data.frame(t((assay(immune.sce,"c_counts_asinh_scaled"))))
+dat.counts$cell <- rownames(dat.counts)
+dat.all <-merge(dat, dat.counts, by.x="cell", by.y="cell")
+
+dat.all.long <-pivot_longer(dat.all, cols = colnames(dat.all)[colnames(dat.all) %in% good.marker], names_to = "target", values_to = "counts")
+
+
+p <-dat.all.long %>%
+  ggplot(aes(x=V1, y=V2, color=counts))+
+  facet_wrap(~target, scales = "free", ncol = 6)+
+  geom_point(alpha=0.5, size=0.2)+
+  scale_color_gradientn(colours=rev(brewer.pal(11, 'Spectral')), name='Counts')+
+  ggtitle('')+
+  theme(strip.background = element_blank(),
+        axis.line=element_blank(),
+        axis.text.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks=element_blank(),
+        axis.title.x=element_blank(),
+        axis.title.y=element_blank(),
+        panel.background=element_blank(),
+        panel.border=element_blank(),
+        panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        plot.background=element_blank(),
+         strip.text = element_text(size=8)) 
+
+#ggsave(filename=file.path(plot_folder, paste0("",i,"CAFmarker",".png",sep="")), plot=p, width=8, height=6)
+plot(p)
+#}
+
+#CAFType
+cluster <- "cell_subtype"
+p <-plotReducedDim(immune.sce, paste(i), colour_by=paste(cluster), point_size=0.5,)+labs(x="UMAP-1", y="UMAP-2", title="UMAP") +scale_color_d3("category20")# text_by = paste(cluster),text_colour ="black",
+plot(p)
+#ggsave(plot=p, file=file.path(plot_folder, paste0("",i,"_CAF_types.png")))
+#CAFSubType
+cluster <- "cell_subtype2"
+p <-plotReducedDim(immune.sce, paste(i), colour_by=paste(cluster), text_by = paste(cluster),text_colour ="red", point_size=0.5,)+labs(x="UMAP-1", y="UMAP-2", title="UMAP")+scale_color_d3("category20") 
+plot(p)
+#ggsave(plot=p, file=file.path(plot_folder, paste0("",i,"_CAF_subtypes.png")))
+
+}
+```
+
+#tumour
+**UMAP with good markers**
+```{r,plot umap CAF all good marker, fig.width=12, fig.height=12, echo=F, message=FALSE,warning=FALSE}
+
+u.map <-c("UMAP_p10","UMAP_p25","UMAP_p50","UMAP_p75","UMAP_p100","tSNE_p10","tSNE_p25","tSNE_p50","tSNE_p75","tSNE_p100")
+
+#u.map="UMAP_p50"
+#i="UMAP_p50"
+#i = "tSNE_p100"
+for(i in u.map){
+dat <-as.data.frame(reducedDims(tumour.sce)[[i]])
+dat$cell <- rownames(dat)
+dat.counts <-as.data.frame(t((assay(tumour.sce,"c_counts_asinh_scaled"))))
+dat.counts$cell <- rownames(dat.counts)
+dat.all <-merge(dat, dat.counts, by.x="cell", by.y="cell")
+
+dat.all.long <-pivot_longer(dat.all, cols = colnames(dat.all)[colnames(dat.all) %in% good.marker], names_to = "target", values_to = "counts")
+
+
+p <-dat.all.long %>%
+  ggplot(aes(x=V1, y=V2, color=counts))+
+  facet_wrap(~target, scales = "free", ncol = 6)+
+  geom_point(alpha=0.5, size=0.2)+
+  scale_color_gradientn(colours=rev(brewer.pal(11, 'Spectral')), name='Counts')+
+  ggtitle('')+
+  theme(strip.background = element_blank(),
+        axis.line=element_blank(),
+        axis.text.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks=element_blank(),
+        axis.title.x=element_blank(),
+        axis.title.y=element_blank(),
+        panel.background=element_blank(),
+        panel.border=element_blank(),
+        panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        plot.background=element_blank(),
+         strip.text = element_text(size=8)) 
+
+#ggsave(filename=file.path(plot_folder, paste0("",i,"CAFmarker",".png",sep="")), plot=p, width=8, height=6)
+plot(p)
+#}
+
+#CAFType
+cluster <- "cell_subtype"
+p <-plotReducedDim(tumour.sce, paste(i), colour_by=paste(cluster), point_size=0.5,)+labs(x="UMAP-1", y="UMAP-2", title="UMAP") +scale_color_d3("category20")# text_by = paste(cluster),text_colour ="black",
+plot(p)
+#ggsave(plot=p, file=file.path(plot_folder, paste0("",i,"_CAF_types.png")))
+}
+```
+
+#merge all cells
+```{r}
+colData(caf.sce.f) %>% colnames
+colData(vessel.sce.f) %>% colnames
+colData(immune.sce.f) %>% colnames
+colData(tumour.sce.f) %>% colnames
+colData(undefined.sce.f) %>% colnames
+undefined.sce.f$celltype <-"other"
+undefined.sce.f$cell_subtype <-"other"
+undefined.sce.f$cell_subtype2 <-"other"
+
+colnames(colData(caf.sce.f))[!colnames(colData(caf.sce.f)) %in%colnames(colData(tumour.sce.f))]
+
+#caf
+cur_DF <- caf.sce.f %>% colData() %>% data.frame %>%select(-contains(c("rp_","som","CAF","mclust","cell_category"))) %>% DataFrame
+cur_DF %>% colnames
+all.equal(paste(cur_DF$ImageNumber, cur_DF$CellNumber), paste(caf.sce.f$ImageNumber, caf.sce.f$CellNumber))
+
+colData(caf.sce.f) <- cur_DF
+
+#immune
+cur_DF <- immune.sce.f %>% colData() %>% data.frame %>%select(-contains(c("immune","mclust","Tcell","cell_category"))) %>% DataFrame
+cur_DF %>% colnames
+all.equal(paste(cur_DF$ImageNumber, cur_DF$CellNumber), paste(immune.sce.f$ImageNumber, immune.sce.f$CellNumber))
+
+colData(immune.sce.f) <- cur_DF
+
+#vessel
+cur_DF <- vessel.sce.f %>% colData() %>% data.frame %>%select(-contains(c("rp_","mclust","vessel","cell_category"))) %>% DataFrame
+cur_DF %>% colnames
+all.equal(paste(cur_DF$ImageNumber, cur_DF$CellNumber), paste(vessel.sce.f$ImageNumber, vessel.sce.f$CellNumber))
+
+colData(vessel.sce.f) <- cur_DF
+
+#tumour
+cur_DF <- tumour.sce.f %>% colData() %>% data.frame %>%select(-contains(c("rp_","mclust", "tumour_type"))) %>% DataFrame
+cur_DF %>% colnames
+all.equal(paste(cur_DF$ImageNumber, cur_DF$CellNumber), paste(tumour.sce.f$ImageNumber, tumour.sce.f$CellNumber))
+
+colData(tumour.sce.f) <- cur_DF
+
+#undefined
+cur_DF <- undefined.sce.f %>% colData() %>% data.frame %>%select(-contains(c("rp_","som","CAF","mclust","cell_category"))) %>% DataFrame
+cur_DF %>% colnames
+all.equal(paste(cur_DF$ImageNumber, cur_DF$CellNumber), paste(undefined.sce.f$ImageNumber, undefined.sce.f$CellNumber))
+
+colData(undefined.sce.f) <- cur_DF
+
+
+reducedDims(immune.sce.f) <-NULL
+reducedDims(caf.sce.f) <-NULL
+reducedDims(tumour.sce.f) <-NULL
+reducedDims(vessel.sce.f) <-NULL
+reducedDims(vessel.sce.f) <-NULL
+
+all.sce <-cbind(immune.sce.f,caf.sce.f, tumour.sce.f, vessel.sce.f, undefined.sce.f)
+saveRDS(all.sce,file=file.path(data_folder, "all_cells_annotated_final.rds"))
+```
+
+
+#subset of all cells
+
+```{r, subset CAF all, echo=F, message=F, warning=F, eval=F}
+#split cells by ImageNumber
+n_cells_dr <- 1000
+cs <- split(seq_len(ncol(all.sce)), all.sce$RoiID)
+length(unique(all.sce$RoiID))
+#sample 'n_cells_dr' per ImageNumber
+cs <- unlist(lapply(cs, function(u) 
+  sample(u, min(n_cells_dr, length(u)))))
+#sub.test <- sce[,cs]
+all.sce.sub <- all.sce[,cs]
+
+#calculate percentage of cells subsetting results in
+p<-dim(assay(all.sce.sub))[2]/dim(assay(all.sce))[2]*100
+
+#results in % of all cells
+print(paste("Subsetting results in a total number of",dim(assay(
+  all.sce.sub))[2],"cells, which corresponds to",round(p,digits=2), "% of all cells of the original sce." ))
+
+saveRDS(all.sce.sub, file=file.path(data_folder, paste("all_cells_annotated_sub.rds")))
+```
+
+```{r, load subset CAF all, message=FALSE, warning=FALSE, echo=FALSE}
+all.sce.sub <- readRDS(file=file.path(data_folder, "all_cells_annotated_sub.rds"))
+```
+
+```{r, calculate umap CAF all, warning=F, message=F, echo=F, eval=FALSE}
+p <-c(10,25,50,75,100)
+#p=50
+for(i in p){
+all.sce.sub <- runUMAP(all.sce.sub,
+                 exprs_values = "c_counts_asinh",
+                 name = paste0("UMAP_p", i),
+                 #use_dimred="PCA_20",
+                 n_neighbors = i)
+#saveRDS(all.sce.sub, file=file.path(data_folder, paste("all_cells_annotated_sub.rds")))
+
+}
+saveRDS(all.sce.sub, file=file.path(data_folder, paste("all_cells_annotated_sub.rds")))
+
+
+for(i in p){
+all.sce.sub <- runTSNE(all.sce.sub,
+                 exprs_values = "c_counts_asinh",
+                 name = paste0("tSNE_p", i),
+                 #use_dimred="PCA_20",
+                 perplexity = i)
+saveRDS(all.sce.sub, file=file.path(data_folder, paste("all_cells_annotated_sub.rds")))
+}
+
+```
+
+
+**UMAP with good markers**
+```{r,plot umap CAF all good marker, echo=F, message=FALSE,warning=FALSE}
+u.map <-c("UMAP_p10","UMAP_p25","UMAP_p50","UMAP_p75","UMAP_p100","tSNE_p10","tSNE_p25","tSNE_p50","tSNE_p75","tSNE_p100")
+
+
+#u.map=c("UMAP_p10","UMAP_p25","UMAP_p50","UMAP_p75","UMAP_p100")
+i="UMAP_p50"
+#i = "tSNE_p100"
+for(i in u.map){
+dat <-as.data.frame(reducedDims(all.sce.sub)[[i]])
+dat$cell <- rownames(dat)
+dat.counts <-as.data.frame(t((assay(all.sce.sub,"c_counts_asinh_scaled"))))
+dat.counts$cell <- rownames(dat.counts)
+dat.all <-merge(dat, dat.counts, by.x="cell", by.y="cell")
+
+dat.all.long <-pivot_longer(dat.all, cols = colnames(dat.all)[colnames(dat.all) %in% good.marker], names_to = "target", values_to = "counts")
+
+
+p <-dat.all.long %>%
+  ggplot(aes(x=V1, y=V2, color=counts))+
+  facet_wrap(~target, scales = "free", ncol = 6)+
+  geom_point(alpha=0.5, size=0.2)+
+  scale_color_gradientn(colours=rev(brewer.pal(11, 'Spectral')), name='Counts')+
+  ggtitle('')+
+  theme(strip.background = element_blank(),
+        axis.line=element_blank(),
+        axis.text.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks=element_blank(),
+        axis.title.x=element_blank(),
+        axis.title.y=element_blank(),
+        panel.background=element_blank(),
+        panel.border=element_blank(),
+        panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        plot.background=element_blank(),
+         strip.text = element_text(size=8)) 
+
+#ggsave(filename=file.path(plot_folder, paste0("",i,"CAFmarker",".png",sep="")), plot=p, width=8, height=6)
+plot(p)
+#}
+
+#CAFType
+cluster <- "celltype"
+p <-plotReducedDim(all.sce.sub, paste(i), colour_by=paste(cluster), point_size=0.5,)+labs(x="UMAP-1", y="UMAP-2", title="UMAP")+scale_color_tableau("Tableau 10")  # text_by = paste(cluster),text_colour ="black",
+plot(p)
+#ggsave(plot=p, file=file.path(plot_folder, paste0("",i,"_CAF_types.png")))
+
+#cell_subtype
+cluster <- "cell_subtype"
+p <-plotReducedDim(all.sce.sub, paste(i), colour_by=paste(cluster),text_colour ="red", point_size=0.5,)+labs(x="UMAP-1", y="UMAP-2", title="UMAP")+scale_color_manual(values=c(as.vector(glasbey(32)),"#808080","#000000")) 
+plot(p)
+#ggsave(plot=p, file=file.path(plot_folder, paste0("",i,"_CAF_subtypes.png")))
+
+#cell_subtype2
+cluster <- "cell_subtype2"
+p <-plotReducedDim(all.sce.sub, paste(i), colour_by=paste(cluster),text_colour ="red", point_size=0.5,)+labs(x="UMAP-1", y="UMAP-2", title="UMAP")+scale_color_manual(values=c(as.vector(glasbey(32)),"#808080","#000000"))  #+scale_color_manual() 
+plot(p)
+#ggsave(plot=p, file=file.path(plot_folder, paste0("",i,"_CAF_subtypes.png")))
+
+}
+```
+
+neighbourhood analysis
+```{r}
+library(imcRtools)
+#test <- all.filtered.sub
+#tma87A <- all.sce_pat.roi[, all.sce_pat.roi$TMA =="87A"]
+
+all.sce <- buildSpatialGraph(all.sce,
+                            img_id = "RoiID",
+                            type = "knn",
+                            k = 15, k_max_dist = 20,
+                            name="knn_k15_dist20",
+                            coords = c("Center_X", "Center_Y"))
+saveRDS(all.sce, file=file.path(data_folder,  "all_cells_annotated_workingfile.rds"))
+
+all.sce <- buildSpatialGraph(all.sce,
+                            img_id = "RoiID",
+                            type = "knn",
+                            k = 10, k_max_dist = 20,
+                            name="knn_k10_dist20",
+                            coords = c("Center_X", "Center_Y"))
+
+all.sce <- buildSpatialGraph(all.sce,
+                            img_id = "RoiID",
+                            type = "knn",
+                            k = 15, k_max_dist = 30,
+                            name="knn_k15_dist30",
+                            coords = c("Center_X", "Center_Y"))
+saveRDS(all.sce, file=file.path(data_folder,  "all_cells_annotated_workingfile.rds"))
+
+all.sce <- buildSpatialGraph(all.sce,
+                            img_id = "RoiID",
+                            type = "knn",
+                            k = 10, k_max_dist = 30,
+                            name="knn_k10_dist30",
+                            coords = c("Center_X", "Center_Y"))
+saveRDS(all.sce,file=file.path(data_folder, "all_cells_annotated_workingfile.rds"))
+
+#save different ks and max_ks under different names
+```
+
+```{r neighbourhood analysis}
+#subtype
+out <- countInteractions(all.sce,
+                         group_by = "RoiID",
+                         label = "cell_subtype",
+                         method = "classic",
+                         colPairName = "knn_k15_dist20")
+out <- data.frame(out)
+#write.csv(out,file=file.path(data_folder,"countInteractions_classic_subtype.csv"))
+#out <- read.csv(file=file.path(data_folder,"countInteractions_classic_subtype.csv"))
+
+out <- testInteractions(all.sce,
+                        group_by = "RoiID",
+                        label = "cell_subtype",
+                        method = "classic",
+                        colPairName = "knn_k15_dist20")
+#out
+out <- data.frame(out)
+write.csv(out,file=file.path(data_folder,"testInteractions_classic_subtype.csv"))
+out <- read.csv(file=file.path(data_folder,"testInteractions_classic_subtype.csv"))
+#subtype histocat
+out <- countInteractions(all.sce,
+                         group_by = "RoiID",
+                         label = "cell_subtype",
+                         method = "histocat",
+                         colPairName = "knn_k15_dist20")
+out <- data.frame(out)
+write.csv(out,file=file.path(data_folder,"countInteractions_histocat_subtype.csv"))
+out <- read.csv(file=file.path(data_folder,"countInteractions_histocat_subtype.csv"))
+
+out <- testInteractions(all.sce,
+                        group_by = "RoiID",
+                        label = "cell_subtype",
+                        method = "histocat",
+                        colPairName = "knn_k15_dist20")
+#out
+out <- data.frame(out)
+write.csv(out,file=file.path(data_folder,"testInteractions_histocat_subtype.csv"))
+out <- read.csv(file=file.path(data_folder,"testInteractions_histocat_subtype.csv"))
+
+#subtype2
+out <- countInteractions(all.sce,
+                         group_by = "RoiID",
+                         label = "cell_subtype2",
+                         method = "classic",
+                         colPairName = "knn_k15_dist20")
+out <- data.frame(out)
+write.csv(out,file=file.path(data_folder,"countInteractions_classic_subtype2.csv"))
+out <- read.csv(file=file.path(data_folder,"countInteractions_classic_subtype2.csv"))
+
+out <- testInteractions(all.sce,
+                        group_by = "RoiID",
+                        label = "cell_subtype2",
+                        method = "classic",
+                        colPairName = "knn_k15_dist20")
+#out
+out <- data.frame(out)
+write.csv(out,file=file.path(data_folder,"testInteractions_classic_subtype2.csv"))
+out <- read.csv(file=file.path(data_folder,"testInteractions_classic_subtype2.csv"))
+
+#subtype 2 histocat
+all.sce$cell_subtype2[all.sce$cell_subtype2=="CD73_CAF"] <- "CD10_CD73CAF"
+all.sce$cell_subtype2[all.sce$cell_subtype2=="CD10_CAF"] <- "CD10_CD73CAF"
+
+out <- countInteractions(all.sce,
+                         group_by = "RoiID",
+                         label = "cell_subtype2",
+                         method = "histocat",
+                         colPairName = "knn_k15_dist20")
+out <- data.frame(out)
+write.csv(out,file=file.path(data_folder,"countInteractions_histocat_subtype2_CAFtype.csv"))
+out <- read.csv(file=file.path(data_folder,"countInteractions_histocat_subtype2.csv"))
+
+out <- testInteractions(all.sce,
+                        group_by = "RoiID",
+                        label = "cell_subtype2",
+                        method = "histocat",
+                        colPairName = "knn_k15_dist20")
+#out
+out <- data.frame(out)
+write.csv(out,file=file.path(data_folder,"testInteractions_histocat_subtype2_CAFtype.csv"))
+out <- read.csv(file=file.path(data_folder,"testInteractions_histocat_subtype2.csv"))
+```
+
+```{r plot neighbourhood results, fig.width=12, fig.height=10}
+#classic subtype 
+out <- read.csv(file=file.path(data_folder,"testInteractions_classic_subtype.csv"))
+
+out$RoiID <- out$group_by
+#out
+p <-out %>% as_tibble() %>%#)
+  group_by(from_label, to_label) %>%
+  summarize(mean_sig = mean(sigval, na.rm = TRUE)) %>%
+  ggplot() + 
+    geom_tile(aes(from_label, to_label, fill = mean_sig)) + #facet_grid( DX.name~ Grade) +
+  scale_fill_gradient2(limits=c(-1, 1),low = "dark blue", mid = "white", high = "dark red") +
+  theme_classic(base_size = 15) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 0))+
+  ggtitle("Subtype, classic")
+plot(p)
+ggsave(plot=p, file=file.path(plot_folder, "Neighbourhood_classic_subtype.pdf"), width=8, height=7)
+
+
+#histocat subtype 2
+out <- read.csv(file=file.path(data_folder,"testInteractions_histocat_subtype.csv"))
+
+out$RoiID <- out$group_by
+#out
+p <-out %>% as_tibble() %>%#)
+  group_by(from_label, to_label) %>%
+  summarize(mean_sig = mean(sigval, na.rm = TRUE)) %>%
+  ggplot() + 
+    geom_tile(aes(from_label, to_label, fill = mean_sig)) + #facet_grid( DX.name~ Grade) +
+  scale_fill_gradient2(limits=c(-1, 1),low = "dark blue", mid = "white", high = "dark red") +
+  theme_classic(base_size = 15) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 0))+
+  ggtitle("Subtype, histocat")
+plot(p)
+ggsave(plot=p, file=file.path(plot_folder, "Neighbourhood_histocat_subtype.pdf"), width=8, height=7)
+
+
+#classic subtype 2
+out <- read.csv(file=file.path(data_folder,"testInteractions_classic_subtype2.csv"))
+
+out$RoiID <- out$group_by
+#out
+p <-out %>% as_tibble() %>%#)
+  group_by(from_label, to_label) %>%
+  summarize(mean_sig = mean(sigval, na.rm = TRUE)) %>%
+  ggplot() + 
+    geom_tile(aes(from_label, to_label, fill = mean_sig)) + #facet_grid( DX.name~ Grade) +
+  scale_fill_gradient2(limits=c(-1, 1),low = "dark blue", mid = "white", high = "dark red") +
+  theme_classic(base_size = 15) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 0))+
+  ggtitle("Subtype 2, classic")
+plot(p)
+ggsave(plot=p, file=file.path(plot_folder, "Neighbourhood_classic_subtype2.pdf"), width=8, height=7)
+
+
+#histocat subtype 2
+out <- read.csv(file=file.path(data_folder,"testInteractions_histocat_subtype2.csv"))
+
+out$RoiID <- out$group_by
+#out
+p <-out %>% as_tibble() %>%#)
+  group_by(from_label, to_label) %>%
+  summarize(mean_sig = mean(sigval, na.rm = TRUE)) %>%
+  ggplot() + 
+    geom_tile(aes(from_label, to_label, fill = mean_sig)) + #facet_grid( DX.name~ Grade) +
+  scale_fill_gradient2(limits=c(-1, 1),low = "dark blue", mid = "white", high = "dark red") +
+  theme_classic(base_size = 15) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 0))+
+  ggtitle("Subtype 2, histocat")
+plot(p)
+ggsave(plot=p, file=file.path(plot_folder, "Neighbourhood_histocat_subtype2.pdf"), width=8, height=7)
+
+
+
+#histocat subtype 2 CAF type
+out <- read.csv(file=file.path(data_folder,"testInteractions_histocat_subtype2_CAFtype.csv"))
+
+out$RoiID <- out$group_by
+#out
+p <-out %>% as_tibble() %>%#)
+  group_by(from_label, to_label) %>%
+  summarize(mean_sig = mean(sigval, na.rm = TRUE)) %>%
+  ggplot() + 
+    geom_tile(aes(from_label, to_label, fill = mean_sig)) + #facet_grid( DX.name~ Grade) +
+  scale_fill_gradient2(limits=c(-1, 1),low = "dark blue", mid = "white", high = "dark red") +
+  theme_classic(base_size = 15) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 0))+
+  ggtitle("Subtype 2, histocat")
+plot(p)
+ggsave(plot=p, file=file.path(plot_folder, "Neighbourhood_histocat_subtype2_CAFType.pdf"), width=8, height=7)
+
+```
+
+```{r}
+
+table(all.sce$celltype, all.sce$cell_subtype)
+```
+
+#complex heatmap coloured by CAF type
+```{r, fig.width=12, fig.height=12}
+agg_sce <-aggregateAcrossCells(all.sce, ids=all.sce$cell_subtype2, average=TRUE, use_exprs_values="c_counts_asinh_scaled" )
+
+agg_sce <- agg_sce[rownames(agg_sce) %in% good.marker,]
+
+hm.genes <- rownames(agg_sce)
+hm.val <- assay(agg_sce,"c_counts_asinh_scaled")[hm.genes,]
+
+#Subtype
+n.cells <-as.data.frame(table(all.sce$cell_subtype2))
+colnames(n.cells) <-c("ids","Frequency")
+n.cells$sqrt_freq <- sqrt(n.cells$Frequency)
+
+col.pal = list(Cluster = viridis(length(unique(n.cells$ids))), Subtype= as.vector(c(as.vector(glasbey(32)),"#000000")))
+
+#no cluster colour
+col.pal <-list(Subtype=as.vector(c(as.vector(glasbey(32)),"#000000")))
+
+names(col.pal$Subtype) <- unique(all.sce$cell_subtype2)
+
+col.pal
+
+#cell type
+p<-Heatmap(hm.val,
+           name="Cluster",
+           col=colorRampPalette(rev(brewer.pal(n = 7, name =
+  "RdYlBu")))(100),
+  clustering_method_rows = "ward.D2",
+  clustering_method_columns = "ward.D2",
+  top_annotation = HeatmapAnnotation(Frequency=anno_barplot(n.cells$sqrt_freq,height = unit(2, "cm")),
+                                     col=col.pal,
+                                     Subtype=unique(all.sce$cell_subtype2))) #,col=col.pal
+draw(p)
+
+
+#Save complex heatmap as pdf
+pdf(file=file.path(plot_folder, paste("C_HM_all_cellsubypes_n_sqrt.pdf")), width=12, height=12)
+draw(p)
+dev.off()
+
+```
+
+#clean
+#Differential abundance analysis loop   
+```{r  Differential Abundance Analysis Types over Metastasis clean, fig.width=6, fig.height=4, warning=F, message=F,echo=F, out.width="50%"}
+#Patient Number must be numeric
+library(tidyr)
+library(ggthemes)
+#groupId must be factor
+#fibro.final$TLS <- ifelse(fibro.final$Area_Description=="TLS", "TLS","no TLS")
+colData(all.sce)<-as.data.frame(colData(all.sce)) %>% 
+  group_by(RoiID) %>% mutate(NR=cur_group_id()) %>% DataFrame()
+dat <-as_tibble(colData(all.sce))
+dat$TLS <- ifelse(dat$Area_Description=="TLS", "TLS","no TLS")
+#if necessary: change group_id labels
+
+
+subtype <-c("Gender","Relapse","Chemo","Dist.Met","LN.Met","Relapse")
+subtype <- "TLS"
+#define the naming subtype aka Celltype
+dat$cell_type <- dat$cell_subtype
+j <-"cell_type"
+
+plot_list <- list()
+for (i in subtype) {
+  #for(k in unique(dat$DX.name)){    #uncomment this if you want to split your loop e.g. by tumour type
+   # dat.l <-subset(dat, DX.name==k) #uncomment this if you want to split your loop e.g. by tumour type
+
+dat.l <-dat
+k="both tumour types" # comment this if you want to split by e.g. tumour type
+dat.l$group_id <-as.factor(dat.l[[i]])
+dat.l<-dat.l %>% drop_na(paste(i))
+
+test <- dat.l %>% select(c("NR",j,"group_id"))
+
+test_wide <- pivot_wider(test,id_cols=c("NR","group_id"),names_from = "cell_type", values_from ="cell_type", values_fn = list(cell_type=length),names_prefix = "")
+
+test_wide
+test_wide[is.na(test_wide)] <- 0
+
+design <- createDesignMatrix(
+  test_wide[,c("NR","group_id")], cols_design = c( "NR","group_id")
+)
+
+contrast <- createContrast(c(rep(0, ncol(design)-1),1))
+data.frame(parameters = colnames(design), contrast)
+
+test_wide_norm <- test_wide %>% select(-c("NR","group_id"))
+#Normalize
+norm_factors <- calcNormFactors(t(test_wide_norm), method = "TMM")
+y <- DGEList(t(test_wide_norm), norm.factors = norm_factors)
+
+y <- estimateDisp(y,design)
+
+fit <- glmFit(y, design)
+lrt <- glmLRT(fit, contrast = contrast)
+top <- edgeR::topTags(lrt, n = Inf, adjust.method = "BH", 
+        sort.by = "none")
+t.op <-as.data.frame(top)
+t.op <- tibble::rownames_to_column(t.op, "FibroTypes")
+
+plot_list[[k]] <-
+ggplot(t.op, aes(reorder(FibroTypes,logFC), logFC)) +
+  geom_col(aes(fill=PValue<0.05)) +
+  coord_flip() +
+  scale_fill_tableau()+
+  labs(x="Celltype", y="logFC",
+       title=paste("Phenotypes over",i,k))+
+  theme_bw()+
+  theme(strip.background = element_blank(),
+        panel.background=element_rect(fill='white', colour = 'black'),
+        panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        axis.text.y = element_text(size=10))
+#plot(p)
+
+
+  #} #uncomment this if you want to split by e.g. tumour type
+  gridExtra::grid.arrange(grobs = plot_list)
+  
+    #save individual pdf plots for each variable
+  #pdf(file=file.path(plot_folder, paste0("DA_Celltype_n_over_",i,".pdf")))
+  #gridExtra::grid.arrange(grobs = plot_list)
+  #dev.off()
+}
+
+t.op %>% ggplot(aes(x=logCPM, y=logFC, color=FibroTypes))+geom_point()+scale_color_tableau()
+t.op %>% ggplot(aes(x=logCPM, y=logFC, color=PValue<0.05))+geom_point()+scale_color_tableau()
+```

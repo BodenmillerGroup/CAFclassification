@@ -1,0 +1,529 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r, import libraries, message=F, warning=F, echo=F}
+library(igraph)
+library(SingleCellExperiment)
+library(S4Vectors)
+library(stringr)
+library(DT)
+
+library(dplyr)
+library(tidyr)
+library(mclust)
+library(ggplot2)
+library(RColorBrewer)
+library(scater)
+library(Rphenoannoy)
+set.seed(101100)
+```
+
+
+```{r, Set wd and load data, message=F, warning=F, echo=F,eval=F}
+#set working directory 
+wd <-dirname(getwd())
+
+data_folder <-(file.path(wd,"sce_objects","stroma","vessel"))
+
+#RAW
+all.vessel<- readRDS(file=file.path(data_folder, "all_stroma_VESSEL_RAW.rds"))
+
+#workingfile
+#all.vessel <- readRDS(file=file.path(data_folder, "all_stroma_VESSEL_workingfile.rds"))
+#saveRDS(all.vessel, file=file.path(data_folder, "all_stroma_VESSEL_workingfile.rds"))
+```
+
+
+```{r, Define stroma_vessel markers, echo=F, warning=F, message=FALSE, eval=F}
+all.marker <-rownames(all.vessel)
+
+bad.marker <- c("Iridium191","Iridium193","CD11b","Histone H3") 
+good.marker <- all.marker[!all.marker %in% bad.marker]
+
+
+vessel.marker <-c("aSMA","FAP", "VCAM1","p75 (CD271)",
+                  "Vimentin",
+                  "PDGFR-b","CD34","CXCL-12","CCL21",
+                  "CD146","vWF","LYVE-1" ,"PNAd")
+print(vessel.marker)
+```
+
+
+
+```{r, calculate umap vessel, warning=F, message=F, echo=F, eval=FALSE}
+p <-c(10,50,100)
+#p=50
+for(i in p){
+all.vessel <- runUMAP(all.vessel,
+                 exprs_values = "c_counts_asinh",
+                 name = paste0("UMAP_p", i),
+                 #use_dimred="PCA_20",
+                 n_neighbors = i)
+saveRDS(all.vessel, file=file.path(data_folder, "all_stroma_VESSEL_workingfile.rds"))
+}
+saveRDS(all.vessel, file=file.path(data_folder, "all_stroma_VESSEL_workingfile.rds"))
+
+for(i in p){
+all.vessel.sub <- runTSNE(all.vessel.sub,
+                 exprs_values = "c_counts_asinh",
+                 name = paste0("tSNE_p", i),
+                 #use_dimred="PCA_20",
+                 perplexity = i)
+saveRDS(all.vessel, file=file.path(data_folder, "all_stroma_VESSEL_workingfile.rds"))}
+```
+
+
+**UMAP with good markers**
+```{r,plot umap vessel stroma marker, fig.width=12, fig.height=8, echo=F, message=FALSE,warning=FALSE, eval=F}
+dat <-as.data.frame(reducedDims(all.vessel)$`UMAP_p50`)
+dat$cell <- rownames(dat)
+dat.counts <-as.data.frame(t((assay(all.vessel,"c_counts_asinh_scaled"))))
+dat.counts$cell <- rownames(dat.counts)
+dat.all <-merge(dat, dat.counts, by.x="cell", by.y="cell")
+
+dat.all.long <-pivot_longer(dat.all, cols = colnames(dat.all)[colnames(dat.all) %in% good.marker], names_to = "target", values_to = "counts")
+
+
+p <-dat.all.long %>%
+  ggplot(aes(x=V1, y=V2, color=counts))+
+  facet_wrap(~target, scales = "free", ncol = 6)+
+  geom_point(alpha=0.5, size=0.2)+
+  scale_color_gradientn(colours=rev(brewer.pal(11, 'Spectral')), name='Counts')+
+  ggtitle('')+
+  theme(strip.background = element_blank(),
+        axis.line=element_blank(),
+        axis.text.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks=element_blank(),
+        axis.title.x=element_blank(),
+        axis.title.y=element_blank(),
+        panel.background=element_blank(),
+        panel.border=element_blank(),
+        panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        plot.background=element_blank(),
+         strip.text = element_text(size=8)) 
+
+##ggsave(filename=file.path(plot_folder, paste("sub_fibro_fibro-Marker_UMAP_p50_NEW.png",sep="")), plot=p, width=16, height=10)
+plot(p)
+
+#vessel marker
+dat <-as.data.frame(reducedDims(all.vessel)$`UMAP_p50`)
+dat$cell <- rownames(dat)
+dat.counts <-as.data.frame(t((assay(all.vessel,"c_counts_asinh_scaled"))))
+dat.counts$cell <- rownames(dat.counts)
+dat.all <-merge(dat, dat.counts, by.x="cell", by.y="cell")
+
+dat.all.long <-pivot_longer(dat.all, cols = colnames(dat.all)[colnames(dat.all) %in% vessel.marker], names_to = "target", values_to = "counts")
+
+
+p <-dat.all.long %>%
+  ggplot(aes(x=V1, y=V2, color=counts))+
+  facet_wrap(~target, scales = "free", ncol = 6)+
+  geom_point(alpha=0.5, size=0.2)+
+  scale_color_gradientn(colours=rev(brewer.pal(11, 'Spectral')), name='Counts')+
+  ggtitle('')+
+  theme(strip.background = element_blank(),
+        axis.line=element_blank(),
+        axis.text.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks=element_blank(),
+        axis.title.x=element_blank(),
+        axis.title.y=element_blank(),
+        panel.background=element_blank(),
+        panel.border=element_blank(),
+        panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        plot.background=element_blank(),
+         strip.text = element_text(size=8)) 
+
+##ggsave(filename=file.path(plot_folder, paste("sub_fibro_fibro-Marker_UMAP_p50_NEW.png",sep="")), plot=p, width=16, height=10)
+plot(p)
+```
+
+**tsne with Tumour markers**
+```{r,plot tsne vessel stroma marker, fig.width=12, fig.height=8, message=F, warning=F, echo=F,eval=F}
+dat <-as.data.frame(reducedDims(all.vessel.sub)$`tSNE_p50`)
+dat$cell <- rownames(dat)
+dat.counts <-as.data.frame(t((assay(all.vessel.sub,"c_counts_asinh_scaled"))))
+dat.counts$cell <- rownames(dat.counts)
+dat.all <-merge(dat, dat.counts, by.x="cell", by.y="cell")
+
+dat.all.long <-pivot_longer(dat.all, cols = colnames(dat.all)[colnames(dat.all) %in% good.marker], names_to = "target", values_to = "counts")
+
+
+p <-dat.all.long %>%
+  ggplot(aes(x=V1, y=V2, color=counts))+
+  facet_wrap(~target, scales = "free", ncol = 6)+
+  geom_point(alpha=0.5, size=0.2)+
+  scale_color_gradientn(colours=rev(brewer.pal(11, 'Spectral')), name='Counts')+
+  ggtitle('')+
+  theme(strip.background = element_blank(),
+        axis.line=element_blank(),
+        axis.text.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks=element_blank(),
+        axis.title.x=element_blank(),
+        axis.title.y=element_blank(),
+        panel.background=element_blank(),
+        panel.border=element_blank(),
+        panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        plot.background=element_blank(),
+         strip.text = element_text(size=8)) 
+
+##ggsave(filename=file.path(plot_folder, paste("sub_fibro_fibro-Marker_UMAP_p50_NEW.png",sep="")), plot=p, width=16, height=10)
+plot(p)
+```
+
+
+```{r Clustering vessel stroma cells using Rphenoannoy, fig.width=25, fig.height=12, message=F, warning=F, echo=F,eval=F}
+hmcol<-rev(brewer.pal(11,"RdBu"))
+rdylbu <-rev(brewer.pal(11,"RdYlBu"))
+
+#marker.clustering <- good.marker[!good.marker %in% "Pan Cytokeratin + Keratin Epithelial"]
+#cellnb <- 250000
+#subsample <-  colnames(sce)[sample(length(colnames(sce)), cellnb)]
+#sce_sub <- sce[, colnames(sce) %in% subsample]
+
+#set ks for clustering
+#i <- 100
+k <- c(15,20,25,30)
+#i<-10
+for (i in k) {
+    all.vessel$RPmembership <- factor(Rphenoannoy(data = t(assay(all.vessel[rownames(all.vessel) %in% good.marker,],"c_counts_asinh")), k = i)[[2]]$membership)
+    cluster <- paste0("rp_vessel_all_k",i)
+  colnames(colData(all.vessel))[which(names(colData(all.vessel)) == "RPmembership")] <- paste0(cluster)
+  agg_sce <-aggregateAcrossCells(all.vessel, ids=all.vessel[[cluster]], average=TRUE, use_exprs_values="c_counts_asinh_scaled" )
+
+ 
+    scater::plotHeatmap(agg_sce,
+              features = good.marker,
+              #features = all.marker,
+              #features = marker.clustering,
+              exprs_values = "c_counts_asinh_scaled",
+              symmetric = FALSE,
+              zlim=c(0,1),
+              color=rdylbu,
+              sortrowss=FALSE,
+              show_colnames=TRUE,
+              color_columns_by = c(cluster),
+              main=paste0("Heatmap tumour cells, ",cluster))
+    
+  #save sce clustering
+  saveRDS(all.vessel, file=file.path(data_folder, "all_stroma_VESSEL_workingfile.rds"))
+
+}
+#all.vessel <-readRDS( file=file.path(data_folder, "stroma_final_VESSEL_workingfile.rds"))
+
+```
+
+
+```{r Clustering vessel only using Rphenoannoy, fig.width=15, fig.height=5, message=F, warning=F, echo=F,eval=F}
+hmcol<-rev(brewer.pal(11,"RdBu"))
+rdylbu <-rev(brewer.pal(11,"RdYlBu"))
+
+#marker.clustering <- good.marker[!good.marker %in% "Pan Cytokeratin + Keratin Epithelial"]
+#cellnb <- 250000
+#subsample <-  colnames(sce)[sample(length(colnames(sce)), cellnb)]
+#sce_sub <- sce[, colnames(sce) %in% subsample]
+
+#set ks for clustering
+#i <- 100
+k <- c(10,15,20,25,30,35,40)
+#i<-20
+k <- c(5:9)
+for (i in k) {
+    all.vessel$RPmembership <- factor(Rphenoannoy(data = t(assay(all.vessel[rownames(all.vessel) %in% vessel.marker,],"c_counts_asinh")), k = i)[[2]]$membership)
+    cluster <- paste0("rp_vessel_vessel_k",i)
+  colnames(colData(all.vessel))[which(names(colData(all.vessel)) == "RPmembership")] <- paste0(cluster)
+  agg_sce <-aggregateAcrossCells(all.vessel, ids=all.vessel[[cluster]], average=TRUE, use_exprs_values="c_counts_asinh_scaled" )
+
+ 
+    scater::plotHeatmap(agg_sce,
+              features =vessel.marker,
+              #features = all.marker,
+              #features = marker.clustering,
+              exprs_values = "c_counts_asinh_scaled",
+              symmetric = FALSE,
+              zlim=c(0,1),
+              color=rdylbu,
+              sortrowss=FALSE,
+              show_colnames=TRUE,
+              color_columns_by = c(cluster),
+              main=paste0("Heatmap tumour cells, ",cluster))
+    
+  #save sce clustering
+  saveRDS(all.vessel, file=file.path(data_folder, "all_stroma_VESSEL_workingfile.rds"))
+
+}
+#all.vessel.final <-readRDS( file=file.path(data_folder, "stroma_final_VESSEL_workingfile.rds"))
+
+```
+
+```{r, vessel type vessel only, fig.width=15, fig.height=5, message=F, warning=F, echo=F,eval=F}
+is.CAF <- c(61,18,44,59,3,4,8,38,30,36,56,12,9,14,19,13,24,21,32,34,51,26,28,53,5,62,46,52,1,49,2,15,7,21,46,26,21)
+
+all.vessel$vesseltype <- ifelse(all.vessel$rp_vessel_vessel_k8 %in%is.CAF, "CAF","vessel")
+
+ cluster <- paste0("rp_vessel_vessel_k8")
+  agg_sce <-aggregateAcrossCells(all.vessel, ids=all.vessel[[cluster]], average=TRUE, use_exprs_values="c_counts_asinh_scaled" )
+
+ 
+    scater::plotHeatmap(agg_sce,
+              features =vessel.marker,
+              #features = all.marker,
+              #features = marker.clustering,
+              exprs_values = "c_counts_asinh_scaled",
+              symmetric = FALSE,
+              zlim=c(0,1),
+              color=rdylbu,
+              sortrowss=FALSE,
+              show_colnames=TRUE,
+              color_columns_by = c("vesseltype"),
+              main=paste0("Heatmap vessel cells, ",cluster))
+    
+table(all.vessel$vesseltype)
+
+vessel.vessel <- all.vessel[, !all.vessel$rp_vessel_vessel_k8 %in% is.CAF]
+vessel.CAF <- all.vessel[, all.vessel$rp_vessel_vessel_k8 %in% is.CAF]
+
+saveRDS(vessel.vessel, file=file.path(data_folder, "vessel-VESSEL.rds"))
+saveRDS(vessel.CAF, file=file.path(wd,"sce_objects","stroma", "CAF_from_vessel.rds"))
+```
+
+
+
+###After adding HEV from CAF clustering
+
+
+
+```{r, Set wd and load data final vessel, message=F, warning=F, echo=F}
+#set working directory 
+wd <-dirname(getwd())
+
+
+#RAW
+#all.vessel<- readRDS(file=file.path(data_folder, "VESSEL_CLINICAL-DATA_FILTERED.rds"))
+
+#workingfile
+data_folder <-(file.path(wd,"sce_objects","stroma","vessel"))
+all.vessel <-readRDS(file=file.path(data_folder, "vessel-VESSEL.rds"))
+
+#all.vessel <- readRDS(file=file.path(data_folder, "stroma_final_VESSEL_workingfile.rds"))
+#saveRDS(all.vessel, file=file.path(data_folder, "FINAL_VESSEL_clinical-data_workingfile.rds"))
+saveRDS(all.vessel, file=file.path(data_folder, "vessel-VESSEL_workingfile.rds"))
+
+```
+
+
+```{r, Define final vessel markers, echo=F, warning=F, message=FALSE}
+all.marker <-rownames(all.vessel)
+
+bad.marker <- c("Iridium191","Iridium193","CD11b","Histone H3") 
+good.marker <- all.marker[!all.marker %in% bad.marker]
+
+vessel.marker <-c("aSMA", "VCAM1","CCL21",
+                  "CD146","vWF","LYVE-1" ,"PNAd")
+print(vessel.marker)
+```
+
+
+
+
+```{r, calculate umap vessel final, warning=F, message=F, echo=F, eval=FALSE}
+p <-c(10,50,100)
+#p=50
+for(i in p){
+all.vessel <- runUMAP(all.vessel,
+                 exprs_values = "c_counts_asinh",
+                 name = paste0("UMAP_p", i),
+                 #use_dimred="PCA_20",
+                 n_neighbors = i)
+saveRDS(all.vessel, file=file.path(data_folder, "vessel-VESSEL_workingfile.rds"))
+
+}
+
+for(i in p){
+all.vessel <- runTSNE(all.vessel,
+                 exprs_values = "c_counts_asinh",
+                name = paste0("tSNE_p", i),
+                 #use_dimred="PCA_20",
+               perplexity = i)
+saveRDS(all.vessel, file=file.path(data_folder, "vessel-VESSEL_workingfile.rds"))
+}
+```
+
+
+**UMAP with good markers**
+```{r,plot umap vessel.final vessel marker, fig.width=12, fig.height=8, echo=F, message=FALSE,warning=FALSE}
+dat <-as.data.frame(reducedDims(all.vessel)$`UMAP_p50`)
+dat$cell <- rownames(dat)
+dat.counts <-as.data.frame(t((assay(all.vessel,"c_counts_asinh_scaled"))))
+dat.counts$cell <- rownames(dat.counts)
+dat.all <-merge(dat, dat.counts, by.x="cell", by.y="cell")
+
+dat.all.long <-pivot_longer(dat.all, cols = colnames(dat.all)[colnames(dat.all) %in% vessel.marker], names_to = "target", values_to = "counts")
+
+
+p <-dat.all.long %>%
+  ggplot(aes(x=V1, y=V2, color=counts))+
+  facet_wrap(~target, scales = "free", ncol = 6)+
+  geom_point(alpha=0.5, size=0.2)+
+  scale_color_gradientn(colours=rev(brewer.pal(11, 'Spectral')), name='Counts')+
+  ggtitle('')+
+  theme(strip.background = element_blank(),
+        axis.line=element_blank(),
+        axis.text.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks=element_blank(),
+        axis.title.x=element_blank(),
+        axis.title.y=element_blank(),
+        panel.background=element_blank(),
+        panel.border=element_blank(),
+        panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        plot.background=element_blank(),
+         strip.text = element_text(size=8)) 
+
+##ggsave(filename=file.path(plot_folder, paste("sub_fibro_fibro-Marker_UMAP_p50_NEW.png",sep="")), plot=p, width=16, height=10)
+plot(p)
+```
+
+**tsne with Tumour markers**
+```{r,plot tsne vessel final marker, fig.width=12, fig.height=8, message=F, warning=F, echo=F,eval=F}
+dat <-as.data.frame(reducedDims(all.vessel.sub)$`tSNE_p50`)
+dat$cell <- rownames(dat)
+dat.counts <-as.data.frame(t((assay(all.vessel.sub,"c_counts_asinh_scaled"))))
+dat.counts$cell <- rownames(dat.counts)
+dat.all <-merge(dat, dat.counts, by.x="cell", by.y="cell")
+
+dat.all.long <-pivot_longer(dat.all, cols = colnames(dat.all)[colnames(dat.all) %in% good.marker], names_to = "target", values_to = "counts")
+
+
+p <-dat.all.long %>%
+  ggplot(aes(x=V1, y=V2, color=counts))+
+  facet_wrap(~target, scales = "free", ncol = 6)+
+  geom_point(alpha=0.5, size=0.2)+
+  scale_color_gradientn(colours=rev(brewer.pal(11, 'Spectral')), name='Counts')+
+  ggtitle('')+
+  theme(strip.background = element_blank(),
+        axis.line=element_blank(),
+        axis.text.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks=element_blank(),
+        axis.title.x=element_blank(),
+        axis.title.y=element_blank(),
+        panel.background=element_blank(),
+        panel.border=element_blank(),
+        panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        plot.background=element_blank(),
+         strip.text = element_text(size=8)) 
+
+##ggsave(filename=file.path(plot_folder, paste("sub_fibro_fibro-Marker_UMAP_p50_NEW.png",sep="")), plot=p, width=16, height=10)
+plot(p)
+```
+
+
+```{r Clustering vessel final cells using Rphenoannoy, fig.width=12, fig.height=6, message=F, warning=F, echo=F,eval=F}
+hmcol<-rev(brewer.pal(11,"RdBu"))
+rdylbu <-rev(brewer.pal(11,"RdYlBu"))
+
+#marker.clustering <- good.marker[!good.marker %in% "Pan Cytokeratin + Keratin Epithelial"]
+#cellnb <- 250000
+#subsample <-  colnames(sce)[sample(length(colnames(sce)), cellnb)]
+#sce_sub <- sce[, colnames(sce) %in% subsample]
+
+#set ks for clustering
+#i <- 100
+k <- c(10:30)
+#i<-10
+for (i in k) {
+    all.vessel$RPmembership <- factor(Rphenoannoy(data = t(assay(all.vessel[rownames(all.vessel) %in% vessel.marker,],"c_counts_asinh")), k = i)[[2]]$membership)
+    cluster <- paste0("rp_vessel_vessel_k",i)
+  colnames(colData(all.vessel))[which(names(colData(all.vessel)) == "RPmembership")] <- paste0(cluster)
+  agg_sce <-aggregateAcrossCells(all.vessel, ids=all.vessel[[cluster]], average=TRUE, use_exprs_values="c_counts_asinh_scaled" )
+
+ 
+    scater::plotHeatmap(agg_sce,
+              features = vessel.marker,
+              #features = all.marker,
+              #features = marker.clustering,
+              exprs_values = "c_counts_asinh_scaled",
+              symmetric = FALSE,
+              zlim=c(0,1),
+              color=rdylbu,
+              sortrowss=FALSE,
+              show_colnames=TRUE,
+             # color_columns_by = c(cluster),
+              main=paste0("Heatmap tumour cells, ",cluster))
+    
+  #save sce clustering
+saveRDS(all.vessel, file=file.path(data_folder, "vessel-VESSEL_workingfile.rds"))
+
+}
+#all.vessel <-readRDS( file=file.path(data_folder, "stroma_final_VESSEL_workingfile.rds"))
+
+```
+
+
+```{r, categorise vessel final,echo=F, message=F, warning=F}
+hmcol<-rev(brewer.pal(11,"RdBu"))
+rdylbu <-rev(brewer.pal(11,"RdYlBu"))
+
+is.blood <- c(1,4,2,7,6,5,9,12,3,8)
+is.lymph <-c(10,13,21,24,15,19,11,18,23,26,27,17,16,20,22,14,25)
+is.HEV <-c(28,29,30)
+
+all.vessel$vessel_type[all.vessel$rp_vessel_vessel_k12 %in% is.HEV] <-"HEV"
+all.vessel$vessel_type[all.vessel$rp_vessel_vessel_k12 %in% is.lymph] <-"Lymphatic"
+all.vessel$vessel_type[all.vessel$rp_vessel_vessel_k12 %in% is.blood] <-"Blood"
+
+agg_sce <-aggregateAcrossCells(all.vessel, ids=all.vessel$rp_vessel_vessel_k12, average=TRUE, use_exprs_values="c_counts_asinh_scaled" )
+
+ 
+    scater::plotHeatmap(agg_sce,
+              features = vessel.marker,
+              #features = all.marker,
+              #features = marker.clustering,
+              exprs_values = "c_counts_asinh_scaled",
+              symmetric = FALSE,
+              zlim=c(0,1),
+              color=rdylbu,
+              sortrowss=FALSE,
+              show_colnames=TRUE,
+              color_columns_by = c("vessel_type"))
+    
+  agg_sce <-aggregateAcrossCells(all.vessel, ids=all.vessel$vessel_type, average=TRUE, use_exprs_values="c_counts_asinh_scaled" )
+
+ 
+    scater::plotHeatmap(agg_sce,
+              features = vessel.marker,
+              #features = all.marker,
+              #features = marker.clustering,
+              exprs_values = "c_counts_asinh_scaled",
+              symmetric = FALSE,
+              zlim=c(0,1),
+              color=rdylbu,
+              sortrowss=FALSE,
+              show_colnames=TRUE,
+              color_columns_by = c("vessel_type"))
+    
+table(all.vessel$vessel_type)
+saveRDS(all.vessel, file=file.path(data_folder, "vessel-VESSEL_workingfile.rds"))
+
+```
+
+```{r, save vessel final, eval=F, message=F, warning=F, echo=F}
+data_folder <-(file.path(wd,"sce_objects","final objects with categories","FINAL"))
+all.vessel$rp_vessel_all_k50 <-NULL
+colnames(colData(all.vessel))
+  saveRDS(all.vessel, file=file.path(data_folder, "FINAL_VESSEL_clinical-data_workingfile.rds"))
+
+```
+
