@@ -1,0 +1,494 @@
+---
+title: "Lung All Cells Analysis"
+author: "Lena Cords"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(viridisLite)
+library(MAST)
+library(ggplot2)
+library(clustree)
+library(destiny)
+```
+
+```{r}
+set.seed(101100)
+```
+
+```{r}
+wd <- dirname(getwd())
+data.folder <- file.path(wd,"data", "lung")
+plot.folder <- file.path(wd,"plots")
+results.folder <- file.path(wd,"plots")
+```
+
+```{r, eval=FALSE}
+obj.list <- SplitObject(lam.data, split.by = "dataset")
+lam.6533 <-obj.list$lambrecht_6533
+lam.6149 <-obj.list$lambrecht_6149
+
+saveRDS(lam.data, file=file.path(data.folder, paste("lam-data_both-datasets-RAW.RDS")))
+saveRDS(lam.6149, file=file.path(data.folder, paste("lam-data_6149-RAW-all.RDS")))
+saveRDS(lam.6533, file=file.path(data.folder, paste("lam-data_6533-RAW-all.RDS")))
+```
+
+load data from cellranger 6533
+```{r, eval=FALSE}
+# Load the  sample
+#BT1375
+data.1375 <- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/BT1375/outs/filtered_feature_bc_matrix/")
+seurat.1375 <- CreateSeuratObject(counts = data.1375, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.1375$sample <- 'lambrecht_1375'
+seurat.1375$tissue <- 'tumour core'
+seurat.1375$dataset <- 'lambrecht_6533'
+
+#BT1376
+data.1376 <- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/BT1376/outs/filtered_feature_bc_matrix/")
+seurat.1376 <- CreateSeuratObject(counts = data.1376, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.1376$sample <- 'lambrecht_1376'
+seurat.1376$tissue <- 'tumour middle'
+seurat.1376$dataset <- 'lambrecht_6533'
+
+#BT1377
+data.1377 <- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/BT1377/outs/filtered_feature_bc_matrix/")
+seurat.1377 <- CreateSeuratObject(counts = data.1377, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.1377$sample <- 'lambrecht_1377'
+seurat.1377$tissue <- 'tumour edge'
+seurat.1377$dataset <- 'lambrecht_6533'
+
+#BT1378
+data.1378 <- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/BT1378/outs/filtered_feature_bc_matrix/")
+seurat.1378 <- CreateSeuratObject(counts = data.1378, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.1378$sample <- 'lambrecht_1378'
+seurat.1378$tissue <- 'normal tissue'
+seurat.1378$dataset <- 'lambrecht_6533'
+
+#BT1425
+data.1425 <- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/scrBT1425_hg19/outs/filtered_feature_bc_matrix/")
+seurat.1425 <- CreateSeuratObject(counts = data.1425, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.1425$sample <- 'lambrecht_1425'
+seurat.1425$tissue <- 'tumour core'
+seurat.1425$dataset <- 'lambrecht_6533'
+
+#BT1426
+data.1426 <- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/scrBT1426_hg19/outs/filtered_feature_bc_matrix/")
+seurat.1426 <- CreateSeuratObject(counts = data.1426, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.1426$sample <- 'lambrecht_1426'
+seurat.1426$tissue <- 'tumour middle'
+seurat.1426$dataset <- 'lambrecht_6533'
+
+#BT1427
+data.1427 <- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/scrBT1427_hg19/outs/filtered_feature_bc_matrix/")
+seurat.1427 <- CreateSeuratObject(counts = data.1427, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.1427$sample <- 'lambrecht_1427'
+seurat.1427$tissue <- "tumour edge"
+seurat.1427$dataset <- 'lambrecht_6533'
+
+#BT1428
+data.1428 <- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/scrBT1428_hg19/outs/filtered_feature_bc_matrix/")
+seurat.1428 <- CreateSeuratObject(counts = data.1428, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.1428$sample <- 'lambrecht_1428'
+seurat.1428$tissue <- 'normal tissue'
+seurat.1428$dataset <- 'lambrecht_6533'
+
+#BT1429
+data.1429 <- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/scrBT1429m/outs/filtered_feature_bc_matrix/")
+seurat.1429 <- CreateSeuratObject(counts = data.1429, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.1429$sample <- 'lambrecht_1429'
+seurat.1429$tissue <- 'normal tissue'
+seurat.1429$dataset <- 'lambrecht_6533'
+
+#BT1430
+data.1430 <- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/scrBT1430m/outs/filtered_feature_bc_matrix/")
+seurat.1430 <- CreateSeuratObject(counts = data.1430, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.1430$sample <- 'lambrecht_1430'
+seurat.1430$tissue <- 'tumour edge'
+seurat.1430$dataset <- 'lambrecht_6533'
+
+#BT1431
+data.1431 <- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/scrBT1431m/outs/filtered_feature_bc_matrix/")
+seurat.1431 <- CreateSeuratObject(counts = data.1431, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.1431$sample <- 'lambrecht_1431'
+seurat.1431$tissue <- 'tumour middle'
+seurat.1431$dataset <- 'lambrecht_6533'
+
+#BT1432
+data.1432 <- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/scrBT1432m/outs/filtered_feature_bc_matrix/")
+seurat.1432  <- CreateSeuratObject(counts = data.1432, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.1432$sample <- 'lambrecht_1432'
+seurat.1432$tissue <- 'tumour middle'
+seurat.1432$dataset <- 'lambrecht_6533'
+```
+
+Load data from cellranger 6149
+```{r, eval=FALSE}
+#6149
+#BT1A
+#data.BT1A<- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/BT1B/outs/filtered_feature_bc_matrix/")
+#seurat.BT1A<- CreateSeuratObject(counts = data.BT1A, project = "lambrecht", min.cells = 3, min.features = 200)
+#seurat.BT1A$sample <- 'lambrecht_BT1A'
+#seurat.BT1A$tissue <- 'tumour core'
+#seurat.BT1A$dataset <- 'lambrecht_6149'
+
+#BT1B
+data.BT1B <- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/BT1B/outs/filtered_feature_bc_matrix/")
+seurat.BT1B <- CreateSeuratObject(counts = data.BT1B, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.BT1B$sample <- 'lambrecht_BT1B'
+seurat.BT1B$tissue <- 'tumour middle'
+seurat.BT1B$dataset <- 'lambrecht_6149'
+
+#BT1C
+data.BT1C <- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/BT1C/outs/filtered_feature_bc_matrix/")
+seurat.BT1C <- CreateSeuratObject(counts = data.BT1C, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.BT1C$sample <- 'lambrecht_BT1C'
+seurat.BT1C$tissue <- 'tumour edge'
+seurat.BT1C$dataset <- 'lambrecht_6149'
+
+#BT2A
+data.BT2A<- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/BT2A/outs/filtered_feature_bc_matrix/")
+seurat.BT2A<- CreateSeuratObject(counts = data.BT2A, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.BT2A$sample <- 'lambrecht_BT2A'
+seurat.BT2A$tissue <- 'tumour middle'
+seurat.BT2A$dataset <- 'lambrecht_6149'
+
+#BT2B
+data.BT2B<- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/BT2B/outs/filtered_feature_bc_matrix/")
+seurat.BT2B<- CreateSeuratObject(counts = data.BT2B, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.BT2B$sample <- 'lambrecht_BT2B'
+seurat.BT2B$tissue <- 'tumour edge'
+seurat.BT2B$dataset <- 'lambrecht_6149'
+
+#BT1249
+data.BT1249<- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/BT1249/outs/filtered_feature_bc_matrix/")
+seurat.BT1249<- CreateSeuratObject(counts = data.BT1249, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.BT1249$sample <- 'lambrecht_BT1249'
+seurat.BT1249$tissue <- 'tumour core'
+seurat.BT1249$dataset <- 'lambrecht_6149'
+
+#1247
+data.1247<- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/1247/outs/filtered_feature_bc_matrix/")
+seurat.1247<- CreateSeuratObject(counts = data.1247, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.1247$sample <- 'lambrecht_BT2B'
+seurat.1247$tissue <- 'normal tissue'
+seurat.1247$dataset <- 'lambrecht_6149'
+
+#BT1290
+data.BT1290<- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/BT1290/outs/filtered_feature_bc_matrix/")
+seurat.BT1290<- CreateSeuratObject(counts = data.BT1290, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.BT1290$sample <- 'lambrecht9_BT1290'
+seurat.BT1290$tissue <- 'tumour edge'
+seurat.BT1290$dataset <- 'lambrecht_6149'
+
+#BT1291
+data.BT1291<- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/BT1291/outs/filtered_feature_bc_matrix/")
+seurat.BT1291<- CreateSeuratObject(counts = data.BT1291, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.BT1291$sample <- 'lambrecht_BT1291'
+seurat.BT1291$tissue <- 'tumour middle'
+seurat.BT1291$dataset <- 'lambrecht_6149'
+
+
+#BT1292
+data.BT1292<- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/BT1292/outs/filtered_feature_bc_matrix/")
+seurat.BT1292<- CreateSeuratObject(counts = data.BT1292, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.BT1292$sample <- 'lambrecht_BT1292'
+seurat.BT1292$tissue <- 'tumour core'
+seurat.BT1292$dataset <- 'lambrecht_6149'
+
+
+#BT1293
+data.BT1293<- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/BT1293/outs/filtered_feature_bc_matrix/")
+seurat.BT1293<- CreateSeuratObject(counts = data.BT1293, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.BT1293$sample <- 'lambrecht_BT1293'
+seurat.BT1293$tissue <- 'normal tissue'
+seurat.BT1293$dataset <- 'lambrecht_6149'
+
+#BT1294
+data.BT1294<- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/BT1294/outs/filtered_feature_bc_matrix/")
+seurat.BT1294<- CreateSeuratObject(counts = data.BT1294, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.BT1294$sample <- 'lambrecht_BT1294'
+seurat.BT1294$tissue <- 'normal tissue'
+seurat.BT1294$dataset <- 'lambrecht_6149'
+
+#BT1295
+data.BT1295<- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/BT1295/outs/filtered_feature_bc_matrix/")
+seurat.BT1295<- CreateSeuratObject(counts = data.BT1295, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.BT1295$sample <- 'lambrecht_BT1295'
+seurat.BT1295$tissue <- 'tumour edge'
+seurat.BT1295$dataset <- 'lambrecht_6149'
+
+#BT1296
+data.BT1296<- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/BT1296/outs/filtered_feature_bc_matrix/")
+seurat.BT1296<- CreateSeuratObject(counts = data.BT1296, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.BT1296$sample <- 'lambrecht_BT1296'
+seurat.BT1296$tissue <- 'tumour middle'
+seurat.BT1296$dataset <- 'lambrecht_6149'
+
+#BT1297
+data.BT1297<- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/BT1297/outs/filtered_feature_bc_matrix/")
+seurat.BT1297<- CreateSeuratObject(counts = data.BT1297, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.BT1297$sample <- 'lambrecht_BT1297'
+seurat.BT1297$tissue <- 'tumour core'
+seurat.BT1297$dataset <- 'lambrecht_6149'
+
+#BT1298
+data.BT1298<- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/BT1298/outs/filtered_feature_bc_matrix/")
+seurat.BT1298<- CreateSeuratObject(counts = data.BT1298, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.BT1298$sample <- 'lambrecht_BT1298'
+seurat.BT1298$tissue <- 'tumour core'
+seurat.BT1298$dataset <- 'lambrecht_6149'
+
+#BT1299
+data.BT1299<- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/BT1299/outs/filtered_feature_bc_matrix/")
+seurat.BT1299<- CreateSeuratObject(counts = data.BT1299, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.BT1299$sample <- 'lambrecht_BT1299'
+seurat.BT1299$tissue <- 'tumour edge'
+seurat.BT1299$dataset <- 'lambrecht_6149'
+
+#BT1300
+data.BT1300<- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/BT1300/outs/filtered_feature_bc_matrix/")
+seurat.BT1300<- CreateSeuratObject(counts = data.BT1300, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.BT1300$sample <- 'lambrecht_BT1300'
+seurat.BT1300$tissue <- 'tumour middle'
+seurat.BT1300$dataset <- 'lambrecht_6149'
+
+#BT1301
+data.BT1301<- Read10X(data.dir = "~/bb_projects/BC_Fibro/Public_scRNAseq_data/Lambrechts_lung/cellranger_out/BT1301/outs/filtered_feature_bc_matrix/")
+seurat.BT1301<- CreateSeuratObject(counts = data.BT1301, project = "lambrecht", min.cells = 3, min.features = 200)
+seurat.BT1301$sample <- 'lambrecht_BT1301'
+seurat.BT1301$tissue <- 'normal tissue'
+seurat.BT1301$dataset <- 'lambrecht_6149'
+```
+
+combine samples
+```{r, eval=FALSE}
+lam.data <- merge(
+  x = seurat.1375,
+  y = list(seurat.1376, seurat.1377, seurat.1378, seurat.1425, seurat.1426, seurat.1427, seurat.1428, seurat.1429, seurat.1430, seurat.1431,seurat.1432,
+          
+           seurat.BT1249,seurat.1247,seurat.BT1B,seurat.BT1C,seurat.BT2A,seurat.BT2B,seurat.BT1290,seurat.BT1291,seurat.BT1292,seurat.BT1293,seurat.BT1294,seurat.BT1295,seurat.BT1296,seurat.BT1297,seurat.BT1298,seurat.BT1299,seurat.BT1300,seurat.BT1301),
+  add.cell.ids = c("lambrecht_1375", "lambrecht_1376", "lambrecht_1377", "lambrecht_1378", "lambrecht_1425", "lambrecht_1426", "lambrecht_1427", "lambrecht_1428", "1lambrecht_429", "lambrecht_1430", "lambrecht_1431", "lambrecht_1432",
+                   "lambrecht_BT1249","lambrecht_1247","lambrecht_BT1B","lambrecht_BT1C","lambrecht_BT2A","lambrecht_BT2B","lambrecht_BT1290","lambrecht_BT1291","lambrecht_BT1292","lambrecht_BT1293","lambrecht_BT1294","lambrecht_BT1295","lambrecht_BT1296","lambrecht_BT1297","lambrecht_BT1298","lambrecht_BT1299","lambrecht_BT1300","lambrecht_BT1301")
+)
+lam.data[["RNA"]]
+
+rm(seurat.1376, seurat.1377, seurat.1378, seurat.1425, seurat.1426, seurat.1427, seurat.1428, seurat.1429, seurat.1430, seurat.1431,
+           seurat.BT1249,seurat.1247,seurat.BT1B,seurat.BT1C,seurat.BT2A,seurat.BT2B,seurat.BT1290,seurat.BT1291,seurat.BT1292,seurat.BT1293,seurat.BT1294,seurat.BT1295,seurat.BT1296,seurat.BT1297,seurat.BT1298,seurat.BT1299,seurat.BT1300,seurat.BT1301,seurat.1375,seurat.1432)
+
+rm(data.1376, data.1377, data.1378, data.1425, data.1426, data.1427, data.1428, data.1429, data.1430, data.1431,
+           data.BT1249,data.1247,data.BT1B,data.BT1C,data.BT2A,data.BT2B,data.BT1290,data.BT1291,data.BT1292,data.BT1293,data.BT1294,data.BT1295,data.BT1296,data.BT1297,data.BT1298,data.BT1299,data.BT1300,data.BT1301, data.1432, data.1375)
+```
+
+```{r, eval=FALSE}
+lam.data <- merge(
+  x = lam.6149,
+  y = lam.6533,
+  add.cell.ids = c("lam-6149","lam-6533")
+)
+
+#lam.data <- SCTransform(lam.data , vars.to.regress = c("percent.mt", "percent.krt", "percent.MGP"), verbose = TRUE)
+VariableFeatures(lam.data[["SCT"]]) <- rownames(lam.data[["SCT"]]@scale.data)
+
+saveRDS(lam.data, file=file.path(data.folder, paste("lam-data_both-datasets-sct-filtered.RDS")))
+```
+
+```{r, eval=FALSE}
+lam.data[["percent.mt"]] <- PercentageFeatureSet(lam.data, pattern = "^MT-")
+
+lam.data <- PercentageFeatureSet(lam.data, pattern = "^KRT", col.name = "percent.krt")
+lam.data <- PercentageFeatureSet(lam.data, pattern = "MGP", col.name = "percent.MGP")
+
+VlnPlot(lam.data, features = c("nFeature_RNA", "nCount_RNA", "percent.mt","percent.MGP","percent.krt"), ncol = 5)
+VlnPlot(lam.6533, features = c("nFeature_RNA", "nCount_RNA", "percent.mt","percent.MGP","percent.krt"), ncol = 5)
+VlnPlot(lam.6149, features = c("nFeature_RNA", "nCount_RNA", "percent.mt","percent.MGP","percent.krt"), ncol = 5)
+
+#lam.data =30466 cells
+
+saveRDS(lam.data, file=file.path(data.folder, paste("lam-data_both-datasets-RAW.RDS")))
+```
+
+
+```{r, eval=FALSE}
+plot1 <- FeatureScatter(lam.data, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(lam.data, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+plot1 + plot2
+```
+
+```{r, eval=FALSE}
+#r fewer than 201 UMIs, over 6,000 or below 101 expressed genes, or over 10% UMIs derived from mitochondrial genome.
+lam.data.sub <- subset(lam.data, subset = nFeature_RNA > 200 & nFeature_RNA < 6000 & percent.mt < 10)
+lam.6533 <- subset(lam.6533, subset = nFeature_RNA > 200 & nFeature_RNA < 6000 & percent.mt < 10)
+lam.6149 <- subset(lam.6149, subset = nFeature_RNA > 200 & nFeature_RNA < 6000 & percent.mt < 10)
+
+#save
+saveRDS(lam.data.sub, file=file.path(data.folder, paste("lam-data_both-datasets-filtered.RDS")))
+saveRDS(lam.6149.sub, file=file.path(data.folder, paste("lam-data_6149-filtered-all.RDS")))
+saveRDS(lam.6533.sub, file=file.path(data.folder, paste("lam-data_6533-filtered-all.RDS")))
+```
+
+```{r, eval=FALSE}
+lam.6149 <- SCTransform(lam.6149 , vars.to.regress = c("percent.mt", "percent.krt", "percent.MGP"), verbose = TRUE)
+saveRDS(lam.6149, file=file.path(data.folder, paste("lam-data_6149-filtered-all-sct.RDS")))
+
+lam.6533 <- SCTransform(lam.6533 , vars.to.regress = c("percent.mt", "percent.krt", "percent.MGP"), verbose = TRUE)
+
+saveRDS(lam.6533, file=file.path(data.folder, paste("lam-data_6533-filtered-all-sct.RDS")))
+```
+
+```{r}
+lam.6149 <-readRDS(file=file.path(data.folder, paste("lam-data_6149-filtered-all-sct.RDS")))
+lam.6533 <-readRDS(file=file.path(data.folder, paste("lam-data_6533-filtered-all-sct.RDS")))
+```
+
+#6149
+```{r, eval=FALSE}
+lam.6149 <- RunPCA(object = lam.6149, verbose = FALSE)
+ElbowPlot(lam.6149)
+print(x = lam.6149[['pca']], dims = 1:5, nfeatures = 5, projected = FALSE)
+PCA_genes <- VizDimLoadings(object = lam.6149, dims = 1:2)
+PCAPlot(object = lam.6149)
+
+DimHeatmap(object = lam.6149, dims = 30:50, cells = 500, balanced = TRUE)
+ElbowPlot(object = lam.6149, ndims =50)
+
+
+lam.6149 <- RunUMAP(object = lam.6149, dims = 1:40)
+lam.6149 <- RunTSNE(object = lam.6149, dims = 1:40)
+saveRDS(lam.6149, file=file.path(data.folder, paste("lam-data_6149-filtered-all-sct.RDS")))
+```
+
+```{r}
+DimPlot(object = lam.6149, reduction = 'umap',group.by = "tissue", label = F,)
+```
+
+```{r,fig.width=12, fig.height=6}
+FeaturePlot(lam.6149, features=c("ACTA2","PECAM1","PTPRC","PDPN","MCAM","CD3E","MS4A1","KRT7","KRT19","HLA-DRB1"), cols=c("lightgrey","black"),ncol=5)  &NoAxes()
+
+#ggsave(filename=file.path(plot.folder, paste("UMAP_FeaturePlot_6149.png")), plot=p, width=12, height=6, dpi=300)
+```
+
+```{r, eval=F}
+lam.6149 <- FindNeighbors(object = lam.6149, dims = 1:40, graph.name = "all.cells")
+lam.6149 <- FindClusters(object = lam.6149, resolution = seq(from = 0.1, to = 1.2, by = 0.1), graph.name = "all.cells")
+```
+
+```{r, fig.width=12, fig.height=12}
+clustree(lam.6149, prefix = "all.cells_res.")
+#ggsave(filename=file.path(plot.folder, paste("clustree_all-cells-6149.pdf")), plot=p, width=10, height=10)
+```
+
+```{r}
+DimPlot(object = lam.6149, reduction = 'umap',group.by = "all.cells_res.0.2", label = T)
+```
+
+```{r,eval=FALSE}
+Idents(lam.6149) <- lam.6149$all.cells_res.0.2
+
+markers.clean.MAST_lam.6149_02<- FindAllMarkers(object = lam.6149, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+write.csv(markers.clean.MAST_lam.6149_02, file = file.path(data.folder,paste( "DE_cluster_AllMarkerGenes_MAST_lam.6149_res02.csv")), row.names = FALSE)
+markers.clean.MAST_lam.6149_02 <- read.csv(file = file.path(data.folder,paste( "DE_cluster_AllMarkerGenes_MAST_lam.6149_res02.csv")))
+
+markers.clean.MAST_lam.6149_02_top5 <- markers.clean.MAST_lam.6149_02 %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
+write.csv(markers.clean.MAST_lam.6149_02_top5, file = file.path(data.folder,paste0( "DE_cluster_AllMarkerGenes_MAST_lam.6149_res02_top5.csv")), row.names = TRUE)
+```
+
+
+```{r, fig.width=12, fig.height=12 }
+markers.clean.MAST_lam.6149_02_top5 <-read.csv(file = file.path(data.folder,paste0( "DE_cluster_AllMarkerGenes_MAST_lam.6149_res02_top5.csv")))
+
+object.downsample = subset(lam.6149, cells = sample(Cells(lam.6149), 10000))
+p <-DoHeatmap(object.downsample, features = markers.clean.MAST_lam.6149_02_top5$gene) + NoLegend()+scale_fill_viridis_c()
+plot(p)
+```
+
+
+```{r, eval=FALSE}
+lam.6149.fibros <- lam.6149[, lam.6149$all.cells_res.0.2==9]
+saveRDS(lam.6149.fibros, file=file.path(data.folder, paste("lam-6149-fibros.RDS")))
+```
+
+#6533
+```{r, eval=FALSE}
+lam.6533 <- RunPCA(object = lam.6533, verbose = FALSE)
+ElbowPlot(lam.6533)
+
+print(x = lam.6533[['pca']], dims = 1:5, nfeatures = 5, projected = FALSE)
+PCA_genes <- VizDimLoadings(object = lam.6533, dims = 1:2)
+PCAPlot(object = lam.6533)
+
+DimHeatmap(object = lam.6533, dims = 1, cells = 500, balanced = TRUE)
+DimHeatmap(object = lam.6533, dims = 30:50, cells = 500, balanced = TRUE)
+ElbowPlot(object = lam.6533, ndims =50)
+
+lam.6533 <- RunUMAP(object = lam.6533, dims = 1:40)
+lam.6533 <- RunTSNE(object = lam.6533, dims = 1:40)
+saveRDS(lam.6533, file=file.path(data.folder, paste("lam-data_6533-filtered-all-sct.RDS")))
+```
+
+```{r}
+DimPlot(object = lam.6533, reduction = 'umap',group.by = "sample", label = F)
+DimPlot(object = lam.6533, reduction = 'umap',group.by = "tissue", label = F,)
+```
+
+```{r, fig.width=12, fig.height=6}
+p<-
+  FeaturePlot(lam.6533, features=c("ACTA2","PECAM1","PTPRC","PDPN","MCAM","CD3E","MS4A1","KRT7","KRT19","HLA-DRB1"), cols=c("lightgrey","black"),ncol=5)  &NoAxes()
+p
+#ggsave(filename=file.path(plot.folder, paste("UMAP_FeaturePlot_6533.png")), plot=p, width=12, height=6, dpi=300)
+```
+
+```{r,eval=FALSE}
+lam.6533 <- FindNeighbors(object = lam.6533, dims = 1:40, graph.name = "all.cells")
+lam.6533 <- FindClusters(object = lam.6533, resolution = seq(from = 0.1, to = 1.2, by = 0.1), graph.name = "all.cells")
+saveRDS(lam.6533, file=file.path(data.folder, paste("lam-data_6533-filtered-all-sct.RDS")))
+```
+
+```{r, fig.width=12, fig.height=12}
+p<-clustree(lam.6533, prefix = "all.cells_res.")
+plot(p)
+#ggsave(filename=file.path(plot.folder, paste("clustree_all-cells-6533.pdf")), plot=p, width=10, height=10)
+```
+
+```{r}
+DimPlot(object = lam.6533, reduction = 'umap',group.by = "all.cells_res.0.2", label = T)
+```
+
+```{r, eval=FALSE}
+Idents(lam.6533) <- lam.6533$all.cells_res.0.2
+
+markers.clean.MAST_lam.6533_02<- FindAllMarkers(object = lam.6533, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+write.csv(markers.clean.MAST_lam.6533_02, file = file.path(data.folder,paste( "DE_cluster_AllMarkerGenes_MAST_lam.6533_res02.csv")), row.names = FALSE)
+markers.clean.MAST_lam.6533_02 <- read.csv(file = file.path(data.folder,paste( "DE_cluster_AllMarkerGenes_MAST_lam.6533_res02.csv")))
+
+markers.clean.MAST_lam.6533_02_top5 <- markers.clean.MAST_lam.6533_02 %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
+write.csv(markers.clean.MAST_lam.6533_02_top5, file = file.path(data.folder,paste0( "DE_cluster_AllMarkerGenes_MAST_lam.6533_res02_top5.csv")), row.names = TRUE)
+```
+
+```{r, fig.width=12, fig.height=12}
+markers.clean.MAST_lam.6533_02_top5 <- read.csv(file = file.path(data.folder,paste0( "DE_cluster_AllMarkerGenes_MAST_lam.6533_res02_top5.csv")))
+
+DoHeatmap(lam.6533, features = markers.clean.MAST_lam.6533_02_top5$gene) + NoLegend()+scale_fill_viridis_c()
+```
+
+```{r, eval=FALSE}
+lam.6533.fibros <- lam.6533[, lam.6533$all.cells_res.0.1==2]
+saveRDS(lam.6533.fibros, file=file.path(data.folder, paste("lam-6533-fibros.RDS")))
+lam.6533.fibros <-readRDS(file=file.path(data.folder, paste("lam-6533-fibros.RDS")))
+```
+
+#all fibroblasts merge
+```{r, eval=FALSE}
+lam.6149.fibros<- readRDS(file=file.path(data.folder, paste("lam-6149-fibros.RDS")))
+lam.6533.fibros <-readRDS(file=file.path(data.folder, paste("lam-6533-fibros.RDS")))
+lam.all.fibros  <- merge(
+  x = lam.6149.fibros,
+  y = lam.6533.fibros,
+  add.cell.ids = c("fibros-6149","fibros-6533")
+)
+saveRDS(lam.all.fibros, file=file.path(data.folder, paste("lam-all-fibros.RDS")))
+```

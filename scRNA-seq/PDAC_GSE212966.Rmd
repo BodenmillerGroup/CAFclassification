@@ -1,0 +1,465 @@
+---
+title: "Analysis large PDAC dataset - GSE212966"
+author: "Lena Cords"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r, echo=FALSE}
+suppressMessages({
+library(splatter)
+library(Seurat)
+library(msigdbr)
+library(singleseqgset)
+library(heatmap3)
+library(GEOquery)
+library(Seurat) 
+library(scater)
+library(SingleCellExperiment)
+library(viridisLite)
+library(viridis)
+library(clustree)
+library(MAST)
+library(destiny)
+library(ggbeeswarm)
+library(ggthemes)
+library(dplyr)
+library(tidyr)
+library(Seurat)
+library(stringr)
+library(colorRamps)
+library(colorRamps)
+library(pheatmap)
+library(RColorBrewer)
+library(dplyr)
+library(singleseqgset)
+library(devtools)
+})
+```
+
+Set seed
+```{r}
+set.seed(101100)
+```
+
+Set working directory
+```{r}
+wd <-dirname(getwd())
+```
+
+Load data
+```{r, eval=FALSE}
+data_folder <- file.path(wd,"R_Scripts","GSE212966")
+
+dat_GSE212966<-getGEOSuppFiles('GSE212966')
+#p1
+expression_matrix_p1 <- ReadMtx(
+  mtx = file.path(data_folder,"GSM6567157_PDAC1_matrix.mtx.gz"), features = file.path(data_folder,"GSM6567157_PDAC1_genes.tsv.gz"),
+  cells = file.path(data_folder,"GSM6567157_PDAC1_barcodes.tsv.gz")
+)
+seurat_object.p1 <- CreateSeuratObject(counts = expression_matrix_p1)
+seurat_object.p1@meta.data$orig.ident <- "P1"
+
+#p2
+expression_matrix_p2 <- ReadMtx(
+  mtx = file.path(data_folder,"GSM6567159_PDAC2_matrix.mtx.gz"), features = file.path(data_folder,"GSM6567159_PDAC2_genes.tsv.gz"),
+  cells = file.path(data_folder,"GSM6567159_PDAC2_barcodes.tsv.gz")
+)
+seurat_object.p2 <- CreateSeuratObject(counts = expression_matrix_p2)
+seurat_object.p2@meta.data$orig.ident <- "P2"
+
+#p3
+expression_matrix_p3 <- ReadMtx(
+  mtx = file.path(data_folder,"GSM6567160_PDAC3_matrix.mtx.gz"), features = file.path(data_folder,"GSM6567160_PDAC3_genes.tsv.gz"),
+  cells = file.path(data_folder,"GSM6567160_PDAC3_barcodes.tsv.gz")
+)
+seurat_object.p3 <- CreateSeuratObject(counts = expression_matrix_p3)
+seurat_object.p3@meta.data$orig.ident <- "P3"
+
+#p1
+expression_matrix_p4 <- ReadMtx(
+  mtx = file.path(data_folder,"GSM6567161_PDAC4_matrix.mtx.gz"), features = file.path(data_folder,"GSM6567161_PDAC4_genes.tsv.gz"),
+  cells = file.path(data_folder,"GSM6567161_PDAC4_barcodes.tsv.gz")
+)
+seurat_object.p4 <- CreateSeuratObject(counts = expression_matrix_p4)
+seurat_object.p4@meta.data$orig.ident <- "P4"
+
+#p1
+expression_matrix_p5 <- ReadMtx(
+  mtx = file.path(data_folder,"GSM6567163_PDAC5_matrix.mtx.gz"), features = file.path(data_folder,"GSM6567163_PDAC5_genes.tsv.gz"),
+  cells = file.path(data_folder,"GSM6567163_PDAC5_barcodes.tsv.gz")
+)
+seurat_object.p5 <- CreateSeuratObject(counts = expression_matrix_p5)
+seurat_object.p5@meta.data$orig.ident <- "P5"
+
+#p1
+expression_matrix_p6 <- ReadMtx(
+  mtx = file.path(data_folder,"GSM6567164_PDAC6_matrix.mtx.gz"), features = file.path(data_folder,"GSM6567164_PDAC6_genes.tsv.gz"),
+  cells = file.path(data_folder,"GSM6567164_PDAC6_barcodes.tsv.gz")
+)
+seurat_object.p6 <- CreateSeuratObject(counts = expression_matrix_p6)
+seurat_object.p6@meta.data$orig.ident <- "P6"
+```
+
+Combine patient data
+```{r, eval=FALSE}
+pdac.combined <- merge(seurat_object.p1, y = c(seurat_object.p2, seurat_object.p3,seurat_object.p4,seurat_object.p5,seurat_object.p6), add.cell.ids = c("P1", "P2", "P3","P4","P5","P6"), project = "PDAC")
+pdac.combined@meta.data$tissue <- "PDAC"
+saveRDS(pdac.combined, file=file.path(wd,"data","pancreas_GSE212966_RAW.rds" ))
+```
+
+RAW data load
+```{r, eval=F}
+pdac.combined.raw <-readRDS(file=file.path(wd,"data","pancreas_GSE212966_RAW.rds" ))
+```
+
+
+```{r, fig.width=12, eval=FALSE}
+pdac.combined.raw[["percent.mt"]] <- PercentageFeatureSet(pdac.combined.raw, pattern = "^MT-")
+pdac.combined.raw <- PercentageFeatureSet(pdac.combined.raw, pattern = "^KRT", col.name = "percent.krt")
+pdac.combined.raw <- PercentageFeatureSet(pdac.combined.raw, pattern = "MGP", col.name = "percent.MGP")
+
+pdac.combined.raw <- SCTransform(pdac.combined.raw , vars.to.regress = c("percent.mt", "percent.krt", "percent.MGP"), verbose = TRUE)
+VariableFeatures(pdac.combined.raw[["SCT"]]) <- rownames(pdac.combined.raw[["SCT"]]@scale.data)
+
+VlnPlot(pdac.combined.raw, features = c("nFeature_RNA", "nCount_RNA", "percent.mt","percent.MGP","percent.krt"), ncol = 5)
+
+FindVariableFeatures(pdac.combined.raw)
+```
+
+```{r, fig.width=10, eval=FALSE}
+plot1 <- FeatureScatter(pdac.combined, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(pdac.combined, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+plot1 + plot2
+```
+
+```{r filter, fig.width=12, eval=FALSE}
+pdac.combined <- subset(pdac.combined, subset = nFeature_RNA > 200 & nFeature_RNA < 6000 & percent.mt < 15)
+VlnPlot(pdac.combined, features = c("nFeature_RNA", "nCount_RNA", "percent.mt","percent.MGP","percent.krt"), ncol = 5)
+saveRDS(pdac.combined, file=file.path(wd,"data","pancreas_GSE212966_RAW_filtered.rds" ))
+```
+
+Load filtered and regressed data
+```{r, fig.width=12}
+pdac.gse212966 <-readRDS(file=file.path(wd,"data","pancreas_GSE212966_RAW_filtered.rds" ))
+VlnPlot(pdac.gse212966, features = c("nFeature_RNA", "nCount_RNA", "percent.mt","percent.MGP","percent.krt"), ncol = 5)
+```
+
+```{r, eval=FALSE}
+pdac.combined <- RunPCA(object = pdac.combined)
+ElbowPlot(pdac.combined)
+
+print(x = pdac.combined[['pca']], dims = 1:5, nfeatures = 5, projected = FALSE)
+PCA_genes <- VizDimLoadings(object = pdac.combined, dims = 1:2)
+
+DimHeatmap(object = pdac.combined, dims = 1, cells = 500, balanced = TRUE)
+DimHeatmap(object = pdac.combined, dims = 10:20, cells = 500, balanced = TRUE)
+ElbowPlot(object = pdac.combined, ndims =40)
+
+
+pdac.combined <- RunUMAP(object = pdac.combined, dims = 1:20)
+pdac.combined <- RunTSNE(object = pdac.combined, dims = 1:20)
+
+data_folder <- file.path(wd,"data","pdac_test")
+
+saveRDS(pdac.combined, file=file.path(data_folder,"pancreas_GSE212966_workingfile.rds" ))
+```
+
+Read final .rds file with all dimension reductions, cluster annotations etc.
+```{r}
+data_folder <- file.path(wd,"data","pdac_test")
+
+pdac.combined <- readRDS(file=file.path(data_folder,"pancreas_GSE212966_workingfile.rds" ))
+```
+
+
+Feature plot all cell types
+```{r, fig.width=12}
+p <-FeaturePlot(pdac.combined, features=c("PTPRC","EPCAM","COL1A1","PDGFRB","ACTA2","RGS5","PECAM","CD3E","MS4A1","CDH1"),reduction="umap",cols=c("lightgrey","black"), ncol=4) &NoAxes()
+plot(p)
+```
+
+Cluster
+```{r, eval=FALSE}
+pdac.combined <- FindNeighbors(object = pdac.combined, dims = 1:20,graph.name = "all.subs")
+pdac.combined <- FindClusters(object = pdac.combined, resolution = seq(from = 0.1, to = 1, by = 0.1), graph.name = "all.subs")
+```
+
+Plot clustering results - clustree
+```{r, fig.width=12, fig.height=12}
+p<-clustree(pdac.combined, prefix = "all.subs_res.", exprs = "scale.data")
+plot(p)
+#ggsave(filename=file.path(plot.folder, paste("clustree_all0-subs.pdf")), plot=p, width=10, height=10)
+```
+
+Plot Cluster resolution 0.1 on UMAP
+```{r}
+DimPlot(object = pdac.combined, reduction = 'umap',group.by = "all.subs_res.0.1",label = T)
+```
+
+Differential expression analysis (MAST) of clusters at resolution 0.1
+```{r, fig.width=25, fig.height=25, eval=FALSE}
+Idents(pdac.combined) <- pdac.combined$all.subs_res.0.1
+
+markers.clean.MAST_pdac.combined_01<- FindAllMarkers(object = pdac.combined, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+#write.csv(markers.clean.MAST_pdac.combined_01, file = file.path(data_folder,paste( "DE_cluster_AllMarkerGenes_MAST_pdac_gse21_res01_new.csv")), row.names = FALSE)
+markers.clean.MAST_pdac.combined_01 <- read.csv(file = file.path(data_folder,paste( "DE_cluster_AllMarkerGenes_MAST_pdac_gse21_res01_new.csv")))
+                                             
+markers.clean.MAST_pdac.combined_01_top10 <- markers.clean.MAST_pdac.combined_01 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+#write.csv(markers.clean.MAST_pdac.combined_01_top10, file = file.path(data_folder,paste0( "DE_cluster_AllMarkerGenes_MAST_pdac_gse21_res01_top10_new.csv")), row.names = TRUE)
+```
+
+Table top 10 differentially expressed genes per cluster
+```{r}
+data_folder <- file.path(wd,"data","pdac_test")
+
+markers.clean.MAST_pdac.combined_01 <- read.csv(file = file.path(data_folder,paste( "DE_cluster_AllMarkerGenes_MAST_pdac_gse21_res01_new.csv")))
+                                             
+markers.clean.MAST_pdac.combined_01_top10 <- markers.clean.MAST_pdac.combined_01 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+
+markers.clean.MAST_pdac.combined_01_top10
+```
+
+Heatmap clusters resolution 0.1 top 10 differentially expressed genes (subsampled to 10,000 cells)
+```{r, fig.width=25, fig.height=25}
+Idents(pdac.combined) <- pdac.combined$all.subs_res.0.1
+
+DoHeatmap(subset(pdac.combined, downsample = 10000), features = markers.clean.MAST_pdac.combined_01_top10$gene)+ NoLegend()+scale_fill_viridis_c()
+```
+Clusters 2 and 4 were identified as fibroblasts.
+
+
+Subset fibroblasts from dataset
+```{r, eval=FALSE}
+pdac.combined.fibro <- subset(x = pdac.combined, subset = all.subs_res.0.1 == "2"|
+                             all.subs_res.0.1 == "4")
+
+saveRDS(pdac.combined, file=file.path(data_folder,"pancreas_GSE212966_workingfile.rds" ))
+
+#fibro
+saveRDS(pdac.combined.fibro, file=file.path(data_folder,"pancreas_GSE212966_FIBRO_RAW.rds" ))
+saveRDS(pdac.combined.fibro, file=file.path(data_folder,"pancreas_GSE212966_FIBRO_workingfile.rds" ))
+```
+
+Load fibroblast data
+```{r, eval=FALSE}
+pdac.combined.fibro <-readRDS(file=file.path(data_folder,"pancreas_GSE212966_FIBRO_workingfile.rds"))
+```
+
+```{r, eval=FALSE}
+data_folder <- file.path(wd, "data","pdac")
+saveRDS(pdac.combined.fibro, file=file.path(data_folder,"pancreas_GSE212966_FIBRO_RAW.rds" ))
+saveRDS(pdac.combined.fibro, file=file.path(data_folder,"pancreas_GSE212966_FIBRO_workingfile.rds" ))
+
+pdac.fibro.gse21 <-readRDS(file=file.path(data_folder,"pancreas_GSE212966_FIBRO_workingfile.rds" ))
+```
+
+```{r}
+data_folder <- file.path(wd, "data","pdac")
+
+#pdac.combined.fibro <-readRDS(file=file.path(data_folder, paste("pancreas_GSE212966_FIBRO_workingfile.rds")))
+#pdac.combined.fibro <-readRDS(file=file.path(data_folder,"pancreas_fibro_workingfile.rds" ))
+pdac.combined.fibro <-readRDS(file=file.path(data_folder,"pdac_fibros_clustered.rds"))
+```
+
+
+```{r, eval=FALSE}
+#FindVariableFeatures(pdac.combined.fibro)
+
+pdac.combined.fibro <- RunPCA(object = pdac.combined.fibro)
+ElbowPlot(pdac.combined.fibro)
+
+print(x = pdac.combined.fibro[['pca']], dims = 1:5, nfeatures = 5, projected = FALSE)
+PCA_genes <- VizDimLoadings(object = pdac.combined.fibro, dims = 1:2)
+
+DimHeatmap(object = pdac.combined.fibro, dims = 1, cells = 500, balanced = TRUE)
+DimHeatmap(object = pdac.combined.fibro, dims = 10:20, cells = 500, balanced = TRUE)
+ElbowPlot(object = pdac.combined.fibro, ndims =40)
+
+pdac.combined.fibro <- RunUMAP(object = pdac.combined.fibro, dims = 1:20)
+
+saveRDS(pdac.combined.fibro, file=file.path(data_folder,"pancreas_fibro_workingfile.rds" ))
+```
+
+Feature Plot of all marker genes
+```{r, fig.width=12}
+my_genes <-c("FAP","PDPN","ACTA2","PLA2G2A","CD34","CFD","MMP11","COL1A1","POSTN","MME","NDRG1","ENO1","RGS5","MCAM","CCL21","CCL19","HLA-DRA","CD74","MKI67","IDO1","HSPH1")
+
+p <-FeaturePlot(pdac.combined.fibro, features=my_genes,reduction="umap",cols=c("lightgrey","black"), ncol=4) &NoAxes()
+plot(p)
+
+#ggsave(p, file=file.path(data_folder, "pdac_test","UMAP_pdac21_Featureplot_4.png"), dpi=300, width=12, height=12, units = "in")
+```
+Clustering
+```{r, eval=FALSE}
+pdac.combined.fibro <- FindNeighbors(object = pdac.combined.fibro, dims = 1:20,graph.name = "fibro.pdac")
+
+pdac.combined.fibro <- FindClusters(object = pdac.combined.fibro, resolution = seq(from = 0.1, to = 1.5, by = 0.1), graph.name = "fibro.pdac")
+saveRDS(pdac.combined.fibro, file=file.path(data_folder,"pancreas_fibro_workingfile.rds" ))
+pdac.combined.fibro <-readRDS(file=file.path(data_folder,"pancreas_fibro_workingfile.rds" ))
+```
+
+Plot clustering results - Clustree
+```{r, fig.width=12, fig.height=12}
+p<-clustree(pdac.combined.fibro, prefix = "fibro.pdac_res.", exprs = "scale.data")
+plot(p)
+#ggsave(filename=file.path(data_folder, "pdac_test", paste("clustree_pdac21.pdf")), plot=p, width=10, height=10)
+```
+
+UMAP clusters printed - resolution 0.6
+```{r}
+DimPlot(object = pdac.combined.fibro, reduction = 'umap',group.by = "fibro.pdac_res.0.6", label = T)
+```
+
+Differential gene expression - resolution 0.6
+```{r, fig.width=15, fig.height=15, eval=F}
+Idents(pdac.combined.fibro) <- pdac.combined.fibro$fibro.pdac_res.0.6
+
+markers.clean.MAST_pdac.combined.fibro_06<- FindAllMarkers(object = pdac.combined.fibro, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+write.csv(markers.clean.MAST_pdac.combined.fibro_06, file = file.path(data_folder,paste( "DE_cluster_AllMarkerGenes_MAST_pdac_gse21_res06.csv")), row.names = FALSE)
+
+markers.clean.MAST_pdac.combined.fibro_06 <- read.csv(file = file.path(data_folder,paste( "DE_cluster_AllMarkerGenes_MAST_pdac_gse21_res06.csv")))
+
+markers.clean.MAST_pdac.combined.fibro_06_top10 <- markers.clean.MAST_pdac.combined.fibro_06 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+write.csv(markers.clean.MAST_pdac.combined.fibro_06_top10, file = file.path(data_folder,paste0( "DE_cluster_AllMarkerGenes_MAST_pdac_gse21_res06_top10_new.csv")), row.names = TRUE)
+```
+
+Table top 10 differentially expressed genes - resolution 0.6
+```{r}
+markers.clean.MAST_pdac.combined.fibro_06 <- read.csv(file = file.path(data_folder,paste( "DE_cluster_AllMarkerGenes_MAST_pdac_gse21_res06.csv")))
+markers.clean.MAST_pdac.combined.fibro_06_top10 <- markers.clean.MAST_pdac.combined.fibro_06 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+markers.clean.MAST_pdac.combined.fibro_06_top10
+```
+
+Heatmap differential expression top 10 marker genes 
+```{r, fig.width=15, fig.height=15}
+Idents(pdac.combined.fibro) <- pdac.combined.fibro$fibro.pdac_res.0.6
+
+DoHeatmap(pdac.combined.fibro, features = markers.clean.MAST_pdac.combined.fibro_06_top10$gene) + NoLegend()+scale_fill_viridis_c()
+```
+
+
+```{r,eval=FALSE}
+Idents(pdac.combined.fibro) <- pdac.combined.fibro$fibro.pdac_res.0.6
+
+#add structural CAFs (sCAFs)/ activated CAFs (aCAFs) to labels
+x <- c(0:9)
+y <-c("mCAF", "mCAF", "iCAF", "tpCAF", "vCAF", "apCAF", "other", "Pericyte", "iCAF","other")
+meta2_cluster <- as.data.frame(cbind(x,y))
+colnames(meta2_cluster) <-c("Cluster","CAF_type_harmony")
+
+meta2 <- meta2_cluster$CAF_type_harmony
+meta2 <-as.character(meta2)
+names(x = meta2) <- levels(x = pdac.combined.fibro)
+pdac.combined.fibro <- RenameIdents(object = pdac.combined.fibro, meta2)
+
+#Save celltype information in metadata
+pdac.combined.fibro[["CAFtype"]] <- Idents(object = pdac.combined.fibro)
+saveRDS(pdac.combined.fibro, file=file.path(data_folder,"pdac_fibros_clustered.rds"))
+pdac.combined.fibro <-readRDS(file=file.path(data_folder,"pdac_fibros_clustered.rds"))
+```
+
+```{r}
+meta2
+```
+
+UMAP CAF type
+```{r}
+p <-DimPlot(object = pdac.combined.fibro, reduction = 'umap',group.by = "CAFtype")
+plot(p)
+#ggsave(file=file.path(data_folder, "pdac_test","UMAP_pdac21_CAFtypes.png"), dpi=300)
+```
+
+UMAP Cluster numbers
+```{r}
+p <-DimPlot(object = pdac.combined.fibro, reduction = 'umap',group.by = "fibro.pdac_res.0.6")
+plot(p)
+```
+
+Differential gene expression analysis - CAF types
+```{r, eval=FALSE}
+Idents(pdac.combined.fibro) <- pdac.combined.fibro$CAFtype
+
+markers.clean.MAST_pdac.combined.fibro_CAFtype<- FindAllMarkers(object = pdac.combined.fibro, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+write.csv(markers.clean.MAST_pdac.combined.fibro_CAFtype, file = file.path(data_folder,"pdac_test",paste( "DE_cluster_AllMarkerGenes_MAST_pdac_gse21_CAFtype.csv")), row.names = FALSE)
+
+markers.clean.MAST_pdac.combined.fibro_CAFtype_top10 <- markers.clean.MAST_pdac.combined.fibro_CAFtype %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+write.csv(markers.clean.MAST_pdac.combined.fibro_CAFtype_top10, file = file.path(data_folder,"pdac_test",paste0( "DE_cluster_AllMarkerGenes_MAST_pdac_gse21_CAFtype_top10_new.csv")), row.names = TRUE)
+```
+
+Table top 10 differentially expressed genes per CAF type
+```{r}
+markers.clean.MAST_pdac.combined.fibro_CAFtype_top10 <-read.csv(file = file.path(data_folder,paste0( "DE_cluster_AllMarkerGenes_MAST_pdac_gse21_CAFtype_top10_new.csv")))
+markers.clean.MAST_pdac.combined.fibro_CAFtype_top10
+```
+
+Heatmap top 10 differentially expressed genes per CAF type
+```{r, fig.width=15, fig.height=15}
+DoHeatmap(pdac.combined.fibro, features = markers.clean.MAST_pdac.combined.fibro_CAFtype_top10$gene) + NoLegend()+scale_fill_viridis_c()
+```
+
+Feature Plot marker genes
+```{r, genes to use, fig.width=18, fig.height=8}
+my_genes <-c("FAP","PDPN","PLA2G2A","CD34","MMP11","COL1A1","POSTN","MME","NDRG1","MCAM","CCL21","CD74","MKI67","RGS5","CFD","IDO1","HSPH1")
+
+p <-FeaturePlot(pdac.combined.fibro, features=c(my_genes,"ACTA2"), cols=c("lightgrey","black"), ncol=8) &NoAxes()
+plot(p)
+#ggsave(filename=file.path(data_folder, paste("UMAP_fibro_pdac_Featureplot_CD34_POSTN.png")), plot=p, width=18, height=8, dpi=300)
+```
+
+#Gene set enrichment analysis of PDAC CAF type hallmark pathways
+```{r}
+#Hallmark genes
+h.human <- msigdbr(species="Homo sapiens",category="H")
+
+h.names <- unique(h.human$gs_name)
+
+h.sets <- vector("list",length=length(h.names))
+names(h.sets) <- h.names
+
+for (i in names(h.sets)) {
+    h.sets[[i]] <- pull(h.human[h.human$gs_name==i,"gene_symbol"])
+}
+```
+
+```{r}
+logfc.data <- singleseqgset::logFC(cluster.ids=pdac.combined.fibro@meta.data$CAFtype,
+                    expr.mat=pdac.combined.fibro[["SCT"]]@scale.data )
+```
+
+```{r}
+gse.res <- wmw_gsea(expr.mat=pdac.combined.fibro[["SCT"]]@scale.data,cluster.cells=logfc.data[[1]],log.fc.cluster=logfc.data[[2]],gene.sets=h.sets)
+```
+
+```{r}
+res.stats <- gse.res[["GSEA_statistics"]]
+res.pvals <- gse.res[["GSEA_p_values"]]
+
+res.pvals <- apply(res.pvals,2,p.adjust,method="fdr") #Correct for multiple comparisons
+
+res.stats[order(res.stats[,1],decreasing=TRUE)[1:10],] 
+```
+
+```{r}
+res.pvals[order(res.stats[,1],decreasing=TRUE)[1:10],] 
+```
+
+Heatmap GSEA
+```{r, fig.width=8, fig.height=18}
+df <- res.stats
+df$hallmark <- rownames(df)
+df <- df %>%
+      mutate_at("hallmark", str_replace, "HALLMARK_", "")
+rownames(df) <- df$hallmark
+df$hallmark <-NULL
+
+rdylbu <-rev(brewer.pal(11,"RdYlBu"))
+
+
+pheatmap(as.matrix(df),  breaks = seq(-4, 4, length.out = 200),   color = colorRampPalette(c("navy", "white", "red"))(200))
+
+#pdf(file=file.path(data_folder, "pdac","GSEA_CAFtypes_n_validation_pdac21.pdf"), height=8, width=18)
+#pheatmap(t(as.matrix(df)),  breaks = seq(-4, 4, length.out = 200),   color = colorRampPalette(c("navy", "white", "red"))(200))
+#dev.off()
+```

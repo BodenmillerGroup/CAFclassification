@@ -1,0 +1,468 @@
+---
+title: "Analysis HNSCC dataset - GSE103322"
+author: "Lena Cords"
+output:
+  html_document:
+    df_print: paged
+---
+
+
+```{r}
+suppressMessages({
+library(splatter)
+library(Seurat)
+library(msigdbr)
+library(singleseqgset)
+library(heatmap3)
+library(GEOquery)
+library(Seurat) 
+library(scater)
+library(SingleCellExperiment)
+library(viridisLite)
+library(viridis)
+library(clustree)
+library(MAST)
+library(destiny)
+library(ggbeeswarm)
+library(ggthemes)
+library(dplyr)
+library(tidyr)
+library(Seurat)
+library(stringr)
+library(colorRamps)
+library(colorRamps)
+library(pheatmap)
+library(RColorBrewer)
+library(dplyr)
+library(singleseqgset)
+library(devtools)
+})
+```
+
+```{r set seed}
+set.seed(101100)
+```
+
+```{r}
+wd <- dirname(getwd())
+plot.folder <- file.path(wd,"results")
+data.folder <- file.path(wd,"data","HNSCC")
+
+#HNSCC.fibro.tumour <-readRDS(file=file.path(data.folder, paste("HNSCC-tumour-fibro(wo-)-Seurat-workingfile.rds")))
+```
+
+
+```{r, eval=F}
+####
+#get data from HNSCC study. DF cells= columns, rows= genes / meta
+dat_gse_103322<-getGEOSuppFiles('GSE103322')
+temp <- read.table(gzfile("GSE103322/GSE103322_HNSCC_all_data.txt.gz"), sep="\t", header = T)
+head(temp)
+
+#subset meta
+meta_gse_103322 <-temp %>% slice(1:5)
+head(meta_gse_103322)
+rownames(meta_gse_103322) <- meta_gse_103322$X
+#meta_gse_103322$X <-NULL
+t_meta_gse_103322 <- as.data.frame(t(meta_gse_103322[,-1]))
+
+t_meta_gse_103322$cell <-rownames(t_meta_gse_103322)  
+head(t_meta_gse_103322)
+
+#
+m_gse_10322 <- temp %>% filter(!X  %in% meta_gse_103322$X)
+rownames(m_gse_10322)<-m_gse_10322$X
+m_gse_10322$X <-NULL
+m_gse <- as.matrix(m_gse_10322)
+head(m_gse_10322)
+
+#get metadata
+expressionSet <- getGEO("GSE103322")
+expressionSet <-expressionSet[[1]]
+dat_expr <-pData(expressionSet)
+meta_gse_103322
+rownames(dat_expr) <-dat_expr$title
+
+#merge metadata
+meta_data_complete_gse_103322 <- merge(t_meta_gse_103322, dat_expr,by.x="cell", by.y="title", all.x=T)
+head(meta_data_complete_gse_103322)
+rownames(meta_data_complete_gse_103322)<-meta_data_complete_gse_103322$cell
+
+#create Seurat Object with metadata
+HNSCC.Seurat <- CreateSeuratObject(counts=m_gse,meta.data = meta_data_complete_gse_103322)
+```
+
+
+```{r, eval=F}
+HNSCC.Seurat <- readRDS(file=file.path(data.folder, paste("HNSCC_Seurat_data.RDS")))
+HNSCC.Seurat <- readRDS(file=file.path(data.folder, paste("HNSCC_RAW.rds")))
+HNSCC.Seurat <- readRDS(file=file.path(data.folder, paste("HNSCC_workingfile.rds")))
+
+saveRDS(HNSCC.Seurat, file=file.path(data.folder, paste("HNSCC-Seurat.rds")))
+```
+
+```{r}
+HNSCC.Seurat <- readRDS(file=file.path(data.folder, paste("HNSCC_workingfile.rds")))
+```
+
+```{r, eval=F}
+FindVariableFeatures(HNSCC.Seurat)
+HNSCC.Seurat = SCTransform(HNSCC.Seurat)
+DefaultAssay(HNSCC.Seurat)
+saveRDS(HNSCC.Seurat, file=file.path(data.folder, paste("HNSCC-Seurat-workingfile.rds")))
+```
+
+```{r, eval=F}
+HNSCC.Seurat <- RunPCA(object = HNSCC.Seurat)
+ElbowPlot(HNSCC.Seurat)
+
+print(x = HNSCC.Seurat[['pca']], dims = 1:5, nfeatures = 5, projected = FALSE)
+PCA_genes <- VizDimLoadings(object = HNSCC.Seurat, dims = 1:2)
+PCAPlot(object = HNSCC.Seurat, group.by="tumor.site.ch1")
+PCAPlot(object = HNSCC.Seurat, group.by="non.cancer.cell.type", cols=viridis(10))
+
+DimHeatmap(object = HNSCC.Seurat, dims = 1, cells = 500, balanced = TRUE)
+DimHeatmap(object = HNSCC.Seurat, dims = 20:35, cells = 500, balanced = TRUE)
+ElbowPlot(object = HNSCC.Seurat, ndims =35)
+
+HNSCC.Seurat <- RunUMAP(object = HNSCC.Seurat, dims = 1:25)
+HNSCC.Seurat <- RunTSNE(object = HNSCC.Seurat, dims = 1:25)
+
+DimPlot(object = HNSCC.Seurat, reduction = 'umap',group.by = "non.cancer.cell.type", label = F)
+```
+
+```{r, eval=FALSE}
+HNSCC.Seurat <- RunPCA(object = HNSCC.Seurat)
+ElbowPlot(HNSCC.Seurat)
+
+print(x = HNSCC.Seurat[['pca']], dims = 1:5, nfeatures = 5, projected = FALSE)
+PCA_genes <- VizDimLoadings(object = HNSCC.Seurat, dims = 1:2)
+
+DimHeatmap(object = HNSCC.Seurat, dims = 1, cells = 500, balanced = TRUE)
+DimHeatmap(object = HNSCC.Seurat, dims = 10:20, cells = 500, balanced = TRUE)
+ElbowPlot(object = HNSCC.Seurat, ndims =40)
+
+
+HNSCC.Seurat <- RunUMAP(object = HNSCC.Seurat, dims = 1:20)
+#HNSCC.Seurat <- RunTSNE(object = HNSCC.Seurat, dims = 1:20)
+
+DimPlot(object = HNSCC.Seurat, reduction = 'umap',group.by = "Cell_type", label = F)
+saveRDS(HNSCC.Seurat, file=file.path(data.folder, paste("HNSCC_workingfile.rds")))
+#saveRDS(HNSCC.Seurat, file=file.path(data.folder, paste("HNSCC_RAW.rds")))
+HNSCC.Seurat <-readRDS(file=file.path(data.folder, paste("HNSCC_workingfile.rds")))
+
+```
+
+Load data
+```{r}
+HNSCC.Seurat <-readRDS(file=file.path(data.folder, paste("HNSCC_workingfile_new.rds")))
+#saveRDS(HNSCC.Seurat, file=file.path(data.folder, paste("HNSCC_workingfile_new.rds")))
+```
+
+
+```{r, eval=FALSE}
+#set dimensions to be used
+HNSCC.Seurat <- FindNeighbors(object = HNSCC.Seurat, dims = 1:20,graph.name = "all.HNSCC")
+#set resolution for clustering ( this has to be changed in otder to determine the best clustering resolution)
+HNSCC.Seurat <- FindClusters(object = HNSCC.Seurat, resolution = seq(from = 0.1, to = 1.5, by = 0.1), graph.name = "all.HNSCC")
+saveRDS(HNSCC.Seurat, file=file.path(data.folder, paste("HNSCC_workingfile_new.rds")))
+```
+
+```{r , fig.width=12, fig.height=12}
+p<-clustree(HNSCC.Seurat, prefix = "all.HNSCC_res.0.", exprs = "scale.data")
+plot(p)
+##ggsave(filename=file.path(plot.folder, paste("clustree_all0-subs.pdf")), plot=p, width=10, height=10)
+```
+
+```{r, fig.width=12, fig.height=8}
+p <-FeaturePlot(HNSCC.Seurat, features=c("ACTA2","RGS5","MCAM","CD36","MYH11","FAP","PDPN","CFD","PLA2G2A","MME","MMP11","CCL19","CD74"),reduction="umap",cols=c("lightgrey","black"), ncol=4) &NoAxes()
+plot(p)
+
+p<-
+  FeaturePlot(HNSCC.Seurat, features=c("ACTA2","PECAM1","PTPRC","PDPN","MCAM","CD3E","MS4A1","KRT7","KRT19","HLA-DRB1"), cols=c("lightgrey","black"),ncol=5)  &NoAxes()
+p
+
+##ggsave(filename=file.path(plot.folder, paste("UMAP_FeaturePlot_HNSCC_sub.png")), plot=p, width=12, height=6, dpi=300)
+```
+
+```{r, eval=FALSE}
+Idents(HNSCC.Seurat) <- HNSCC.Seurat$all.HNSCC_res.0.2
+
+markers.clean.MAST_HNSCC_02<- FindAllMarkers(object = HNSCC.Seurat, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+write.csv(markers.clean.MAST_HNSCC_02, file = file.path(data.folder,paste( "DE_cluster_AllMarkerGenes_MAST_HNSCC_res02_new.csv")), row.names = FALSE)
+
+markers.clean.MAST_HNSCC_02_top20 <- markers.clean.MAST_HNSCC_02 %>% group_by(cluster) %>% top_n(n = 20, wt = avg_log2FC)
+write.csv(markers.clean.MAST_HNSCC_02_top20, file = file.path(data.folder,paste0( "DE_cluster_AllMarkerGenes_MAST_HNSCC_res02_top20_new.csv")), row.names = TRUE)
+```
+
+```{r, fig.width=15, fig.height=15}
+markers.clean.MAST_HNSCC_02_top20 <- read.csv(file = file.path(data.folder,paste0( "DE_cluster_AllMarkerGenes_MAST_HNSCC_res02_top20_new.csv")))
+DoHeatmap(HNSCC.Seurat, features = markers.clean.MAST_HNSCC_02_top20$gene) + NoLegend()+scale_fill_viridis_c()
+```
+
+
+```{r}
+DimPlot(object = HNSCC.Seurat, reduction = 'umap',group.by = "all.HNSCC_res.0.2", label = T)
+```
+
+
+```{r}
+DimPlot(object = HNSCC.Seurat, reduction = 'umap',group.by = "tumor.site.ch1", label = F)
+```
+
+
+```{r}
+markers.clean.MAST_HNSCC_02_top20
+```
+
+
+```{r, eval=F}
+HNSCC.fibro.me <- subset(x = HNSCC.Seurat, subset = all.HNSCC_res.0.2 == "3"|
+                           all.HNSCC_res.0.2 == "4")
+
+saveRDS(HNSCC.fibro.me, file=file.path(data.folder, paste("HNSCC_fibro_me_RAW.rds")))
+
+#tumour fibros
+HNSCC.fibro.me.tumour <- subset(x = HNSCC.fibro.me, subset = tumor.site.ch1 != "Lymph node")
+saveRDS(HNSCC.fibro.me.tumour, file=file.path(data.folder, paste("HNSCC_fibro_me_tumour.rds")))
+```
+
+Read fibro data
+```{r}
+HNSCC.fibro.me <- readRDS(file=file.path(data.folder, paste("HNSCC_fibro_me_wf.rds")))
+```
+
+#my annotation of CAFs
+
+```{r, eval=F}
+HNSCC.fibro.me <- RunPCA(object = HNSCC.fibro.me)
+ElbowPlot(HNSCC.fibro.me)
+
+print(x = HNSCC.fibro.me[['pca']], dims = 1:5, nfeatures = 5, projected = FALSE)
+PCA_genes <- VizDimLoadings(object = HNSCC.fibro.me, dims = 1:2)
+
+DimHeatmap(object = HNSCC.fibro.me, dims = 1, cells = 500, balanced = TRUE)
+DimHeatmap(object = HNSCC.fibro.me, dims = 10:20, cells = 500, balanced = TRUE)
+ElbowPlot(object = HNSCC.fibro.me, ndims =40)
+
+
+HNSCC.fibro.me <- RunUMAP(object = HNSCC.fibro.me, dims = 1:20)
+#HNSCC.fibro.me <- RunTSNE(object = HNSCC.fibro.me, dims = 1:20)
+
+saveRDS(HNSCC.fibro.me, file=file.path(data.folder, paste("HNSCC_fibro_me_wf.rds")))
+HNSCC.fibro.me <- readRDS(file=file.path(data.folder, paste("HNSCC_fibro_me_wf.rds")))
+
+```
+
+```{r tumour site}
+#umap
+#DimPlot(object = HNSCC.fibro.me, reduction = 'umap',group.by = "Cell_subtype", label = F)+theme_void()
+DimPlot(object = HNSCC.fibro.me, reduction = 'umap',group.by = "tumor.site.ch1", label = F)+theme_void()
+
+#ggsave(p, file=file.path(data_folder,"HNSCC","UMAP_tumoursite.png"),dpi=300)
+#pca
+```
+
+```{r Feature Plot genes all subs, fig.width=12, fig.height=10}
+my_genes <-c("FAP","PDPN","ACTA2","PLA2G2A","CD34","CFD","MMP11","COL1A1","POSTN","MME","NDRG1","ENO1","RGS5","MCAM","CCL21","CCL19","HLA-DRA","CD74","MKI67","IDO1","HSPH1")
+
+p <-FeaturePlot(HNSCC.fibro.me, features=my_genes,reduction="umap",cols=c("lightgrey","black"), ncol=4) &NoAxes()
+plot(p)
+```
+
+```{r, eval=F}
+#set dimensions to be used
+HNSCC.fibro.me <- FindNeighbors(object = HNSCC.fibro.me, dims = 1:20,graph.name = "all.subs")
+#set resolution for clustering ( this has to be changed in otder to determine the best clustering resolution)
+HNSCC.fibro.me <- FindClusters(object = HNSCC.fibro.me, resolution = seq(from = 0.1, to = 1.5, by = 0.1), graph.name = "all.subs")
+
+saveRDS(HNSCC.fibro.me, file=file.path(data.folder, paste("HNSCC_fibro_me_wf.rds")))
+
+```
+
+```{r, fig.width=12, fig.height=12}
+p<-clustree(HNSCC.fibro.me, prefix = "all.subs_res.0.", exprs = "scale.data")
+plot(p)
+#ggsave(filename=file.path(data_folder,"HNSCC", paste("clustree_HNSCC.pdf")), plot=p, width=10, height=10)
+```
+
+```{r, eval=FALSE}
+Idents(HNSCC.fibro.me) <- HNSCC.fibro.me$all.subs_res.0.6
+
+markers.clean.MAST_HNSCC.fibro.me_06<- FindAllMarkers(object = HNSCC.fibro.me, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+write.csv(markers.clean.MAST_HNSCC.fibro.me_06, file = file.path(data.folder,paste( "DE_cluster_AllMarkerGenes_MAST_HNSCC.fibro.me_res06_new2.csv")), row.names = FALSE)
+
+markers.clean.MAST_HNSCC.fibro.me_06_top20 <- markers.clean.MAST_HNSCC.fibro.me_06 %>% group_by(cluster) %>% top_n(n = 20, wt = avg_log2FC)
+write.csv(markers.clean.MAST_HNSCC.fibro.me_06_top20, file = file.path(data.folder,paste0( "DE_cluster_AllMarkerGenes_MAST_HNSCC.fibro.me_res06_top20_new2.csv")), row.names = TRUE)
+```
+
+```{r, fig.height=15, fig.width=15}
+markers.clean.MAST_HNSCC.fibro.me_06_top20 <- read.csv(file = file.path(data.folder,paste0( "DE_cluster_AllMarkerGenes_MAST_HNSCC.fibro.me_res06_top20_new2.csv")))
+
+
+DoHeatmap(HNSCC.fibro.me, features = markers.clean.MAST_HNSCC.fibro.me_06_top20$gene) + NoLegend()+scale_fill_viridis_c()
+```
+
+```{r}
+DimPlot(object = HNSCC.fibro.me, reduction = 'umap',group.by = "all.subs_res.0.6", label = T)
+```
+
+```{r}
+markers.clean.MAST_HNSCC.fibro.me_06_top20
+```
+
+```{r}
+#umap
+p <-DimPlot(object = HNSCC.fibro.me, reduction = 'umap',group.by = "cluster_ft", label = F)+theme_void()
+plot(p)
+#ggsave(p, file=file.path(data_folder, "HNSCC","UMAP_CAFType.png"), dpi=300)
+```
+
+```{r, eval=FALSE}
+Idents(HNSCC.fibro.me) <- HNSCC.fibro.me$all.subs_res.0.6
+
+#add sCAFs / mCAFs to labels
+x <- c(0:8)
+y <-c("vCAF","vCAF","iCAF","tpCAF","Pericyte","rCAF+apCAF","tpCAF","Pericyte","other")
+cluster_names <- as.data.frame(cbind(x,y))
+colnames(cluster_names) <-c("Cluster","CAF_type")
+
+cluster_ft <- cluster_names$CAF_type
+cluster_ft <-as.character(cluster_ft)
+names(x = cluster_ft) <- levels(x = HNSCC.fibro.me)
+HNSCC.fibro.me <- RenameIdents(object = HNSCC.fibro.me, cluster_ft)
+
+#Save celltype information in metadata
+HNSCC.fibro.me[["cluster_ft"]] <- Idents(object = HNSCC.fibro.me)
+```
+
+```{r}
+x <- c(0:8)
+y <-c("vCAF","vCAF","iCAF","tpCAF","Pericyte","rCAF+apCAF","tpCAF","Pericyte","other")
+cluster_names <- as.data.frame(cbind(x,y))
+colnames(cluster_names) <-c("Cluster","CAF_type")
+cluster_names
+```
+
+```{r, eval=FALSE}
+Idents(HNSCC.fibro.me) <- HNSCC.fibro.me$cluster_ft
+
+markers.clean.MAST_HNSCC.fibro_cluster<- FindAllMarkers(object = HNSCC.fibro.me, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+write.csv(markers.clean.MAST_HNSCC.fibro_cluster, file = file.path(data_folder,"HNSCC",paste( "DE_cluster_AllMarkerGenes_MAST_HNSCC_CAFtype.csv")), row.names = FALSE)
+
+markers.clean.MAST_HNSCC.fibro_cluster_top10 <- markers.clean.MAST_HNSCC.fibro_cluster %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+write.csv(markers.clean.MAST_HNSCC.fibro_cluster_top10, file = file.path(data_folder,"HNSCC",paste0( "DE_cluster_AllMarkerGenes_MAST_HNSCC_CAFtype.csvr_top10.csv")), row.names = TRUE)
+```
+
+
+```{r, fig.height=15, fig.width=15}
+markers.clean.MAST_HNSCC.fibro_cluster_top10 <- read.csv(file = file.path(data.folder,paste0( "DE_cluster_AllMarkerGenes_MAST_HNSCC_CAFtype.csvr_top10.csv")))
+
+DoHeatmap(HNSCC.fibro.me, features = markers.clean.MAST_HNSCC.fibro_cluster_top10$gene) +scale_fill_viridis_c()
+```
+
+
+
+```{r}
+df <- prop.table(x=table(HNSCC.fibro.me$tumor.site.ch1, HNSCC.fibro.me$cluster_ft), margin=2)
+df <- as.data.frame(df)
+colnames(df) <- c('Dataset', 'Cluster', 'Prop')
+
+p <-
+  ggplot(df, aes(x=Cluster, y = Prop, fill=Dataset)) +
+  #scale_fill_viridis(discrete=TRUE)+
+  geom_bar(stat="identity", position="fill")+
+  theme(axis.title.x=element_blank(), axis.title.y = element_blank())+
+  coord_flip()+
+  theme(panel.background = element_blank(), axis.text.x = element_text(hjust=1, angle=45))+
+  ggtitle('CAF phenotype distribution per patient')+
+  scale_fill_tableau()
+p
+#ggsave(plot=p, file=file.path(data_folder,"HNSCC", paste("BARplot_HNSCC_CAFs over tissue.pdf")))
+```
+
+
+```{r}
+Idents(HNSCC.fibro.me) <- HNSCC.fibro.me$cluster_ft
+
+DimPlot(object = HNSCC.fibro.me, reduction = 'umap',group.by = "cluster_ft", label = F)+labs(colour="cluster_ft")+theme_void()
+
+```
+
+
+```{r, eval=FALSE}
+HNSCC.fibro.me.tumour <- subset(x = HNSCC.fibro.me, subset = tumor.site.ch1 != "Lymph node"&
+                                  cluster_ft !=  "other")
+  
+
+saveRDS(HNSCC.fibro.me.tumour, file=file.path(data_folder,"HNSCC","HNSCC_tumour_fibros_clustered_me_minusOther.rds"))
+```
+
+```{r}
+HNSCC.fibro.me.tumour <-readRDS(file=file.path(data.folder,"HNSCC_tumour_fibros_clustered_me_minusOther.rds"))
+```
+
+
+Gene set enrichment analysis
+```{r}
+#Hallmark genes
+h.human <- msigdbr(species="Homo sapiens",category="H")
+
+h.names <- unique(h.human$gs_name)
+
+h.sets <- vector("list",length=length(h.names))
+names(h.sets) <- h.names
+
+for (i in names(h.sets)) {
+    h.sets[[i]] <- pull(h.human[h.human$gs_name==i,"gene_symbol"])
+}
+```
+
+```{r}
+HNSCC.fibro.me.tumour$cluster_ft <- droplevels(HNSCC.fibro.me.tumour$cluster_ft)
+```
+
+```{r}
+HNSCC.fibro.me.tumour$cluster_ft <- droplevels(HNSCC.fibro.me.tumour$cluster_ft)
+logfc.data <- singleseqgset::logFC(cluster.ids=HNSCC.fibro.me.tumour@meta.data$cluster_ft,
+                    expr.mat=HNSCC.fibro.me.tumour[["SCT"]]@scale.data )
+```
+
+```{r}
+gse.res <- wmw_gsea(expr.mat=HNSCC.fibro.me.tumour[["SCT"]]@scale.data,cluster.cells=logfc.data[[1]],log.fc.cluster=logfc.data[[2]],gene.sets=h.sets)
+```
+
+```{r}
+res.stats <- gse.res[["GSEA_statistics"]]
+res.pvals <- gse.res[["GSEA_p_values"]]
+
+res.pvals <- apply(res.pvals,2,p.adjust,method="fdr") #Correct for multiple comparisons
+
+res.stats[order(res.stats[,1],decreasing=TRUE)[1:10],] #Top gene sets enriched by z scores
+```
+
+```{r}
+res.pvals[order(res.stats[,1],decreasing=TRUE)[1:10],] #Top gene sets by p values
+```
+
+```{r, fig.width=8, fig.height=18}
+df <- res.stats
+df$hallmark <- rownames(df)
+df <- df %>%
+      mutate_at("hallmark", str_replace, "HALLMARK_", "")
+rownames(df) <- df$hallmark
+df$hallmark <-NULL
+
+
+#pheatmap(as.matrix(df),   color = blue2red(200))
+
+#pheatmap(as.matrix(res.stats),   color = blue2red(200))
+
+rdylbu <-rev(brewer.pal(11,"RdYlBu"))
+
+pheatmap(as.matrix(df),  breaks = seq(-4, 4, length.out = 200),   color = colorRampPalette(c("navy", "white", "red"))(200))
+
+#pdf(file=file.path(data_folder, "HNSCC","GSEA_CAFtypes_n_validation.pdf"), height=8, width=18)
+#pheatmap(t(as.matrix(df)),  breaks = seq(-4, 4, length.out = 200),   color = colorRampPalette(c("navy", "white", "red"))(200))
+#dev.off()
+```

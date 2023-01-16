@@ -1,0 +1,306 @@
+---
+title: "Analysis NSCLC E-MTAB-6149 and E-MTAB-6533"
+author: "Lena Cords"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+suppressMessages({
+library(splatter)
+library(Seurat)
+library(msigdbr)
+library(singleseqgset)
+library(heatmap3)
+library(GEOquery)
+library(Seurat) 
+library(scater)
+library(SingleCellExperiment)
+library(viridisLite)
+library(viridis)
+library(clustree)
+library(MAST)
+library(destiny)
+library(ggbeeswarm)
+library(ggthemes)
+library(dplyr)
+library(tidyr)
+library(Seurat)
+library(stringr)
+library(colorRamps)
+library(colorRamps)
+library(pheatmap)
+library(RColorBrewer)
+library(dplyr)
+library(singleseqgset)
+library(devtools)
+})
+```
+
+```{r}
+set.seed(101100)
+```
+
+```{r}
+wd <- dirname(getwd())
+data.folder <- file.path(wd,"data","lung")
+```
+
+```{r, eval=FALSE}
+lam.data <- readRDS(file=file.path(data.folder, paste("lam-data_both-datasets-RAW.RDS")))
+lam.6149 <- readRDS(file=file.path(data.folder, paste("lam-data_6149-filtered-all-sct.RDS")))
+lam.6533 <-readRDS(file=file.path(data.folder, paste("lam-data_6533-filtered-all-sct.RDS")))
+```
+
+```{r, eval=FALSE}
+lam.6149.fibros<- readRDS(file=file.path(data.folder, paste("lam-6149-fibros.RDS")))
+lam.6533.fibros <-readRDS(file=file.path(data.folder, paste("lam-6533-fibros.RDS")))
+lam.all.fibros  <- merge(
+  x = lam.6149.fibros,
+  y = lam.6533.fibros,
+  add.cell.ids = c("fibros-6149","fibros-6533")
+)
+saveRDS(lam.all.fibros, file=file.path(data.folder, paste("lam-all-fibros.RDS")))
+lam.all.fibros<-readRDS(file=file.path(data.folder, paste("lam-all-fibros.RDS")))
+
+saveRDS(lam.all.fibros, file=file.path(data.folder, paste("lung-all-fibros.RDS")))
+```
+
+```{r, eval=FALSE}
+DefaultAssay(lam.all.fibros) <- "SCT"
+lam.all.fibros <- SCTransform(lam.all.fibros , vars.to.regress = c("percent.mt", "percent.krt", "percent.MGP"), verbose = TRUE)
+
+lam.all.fibros <- RunPCA(object = lam.all.fibros, verbose = FALSE)
+ElbowPlot(lam.all.fibros)
+
+print(x = lam.all.fibros[['pca']], dims = 1:5, nfeatures = 5, projected = FALSE)
+PCA_genes <- VizDimLoadings(object = lam.all.fibros, dims = 1:2)
+PCAPlot(object = lam.all.fibros)
+
+#Choose significant dimensions
+DimHeatmap(object = lam.all.fibros, dims = 1, cells = 500, balanced = TRUE)
+DimHeatmap(object = lam.all.fibros, dims = 10:30, cells = 500, balanced = TRUE)
+ElbowPlot(object = lam.all.fibros, ndims =50)
+
+lam.all.fibros <- RunUMAP(object = lam.all.fibros, dims = 1:15)
+lam.all.fibros <- RunTSNE(object = lam.all.fibros, dims = 1:15)
+saveRDS(lam.all.fibros, file=file.path(data.folder, paste("lam-all-fibros-filtered-all-sct.RDS")))
+lam.all.fibros <-readRDS(file=file.path(data.folder, paste("lam-all-fibros-filtered-all-sct.RDS")))
+```
+
+```{r}
+lam.all.fibros <- readRDS(file=file.path(data.folder, "lung_all_fibros_workingfile_finalcluster.rds"))
+```
+
+```{r}
+p <-DimPlot(object = lam.all.fibros, reduction = 'umap',group.by = "tissue", label = F)
+plot(p)
+#ggsave(p, file=file.path(data.folder,"lung_tissue_CAFs.png"))
+```
+
+
+```{r, fig.width=12, fig.height=12}
+my_genes <-c("FAP","PDPN","ACTA2","PLA2G2A","CD34","CFD","MMP11","COL1A1","POSTN","MME","NDRG1","ENO1","RGS5","MCAM","CCL21","CCL19","HLA-DRA","CD74","MKI67","IDO1","HSPH1")
+
+FeaturePlot(lam.all.fibros, features=my_genes, cols=c("lightgrey","black"),ncol=4)  &NoAxes()
+#ggsave(filename=file.path(plot.folder, paste("UMAP_FeaturePlot_all-fibros.png")), plot=p, width=12, height=6, dpi=300)
+```
+
+```{r, eval=FALSE}
+#set dimensions to be used
+lam.all.fibros <- FindNeighbors(object = lam.all.fibros, dims = 1:15, graph.name = "all.fibros")
+#set resolution for clustering ( this has to be changed in otder to determine the best clustering resolution)
+lam.all.fibros <- FindClusters(object = lam.all.fibros, resolution = seq(from = 0.1, to = 1.5, by = 0.1), graph.name = "all.fibros")
+
+saveRDS(lam.all.fibros, file=file.path(data.folder,"lung_all_fibros_workingfile.rds"))
+```
+
+```{r, fig.width=12, fig.height=12}
+p<-clustree(lam.all.fibros, prefix = "all.fibros_res.")
+plot(p)
+#ggsave(filename=file.path(data_folder, "lung", paste("clustree_lung_all-fibros.pdf")), plot=p, width=10, height=10)
+```
+
+```{r}
+DimPlot(object = lam.all.fibros, reduction = 'umap',group.by = "all.cells_res.0.8", label = T)
+```
+
+```{r, eval=FALSE}
+Idents(lam.all.fibros) <- lam.all.fibros$all.fibros_res.0.8
+
+markers.clean.MAST_lam.all.fibros_08 <- FindAllMarkers(object = lam.all.fibros, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+
+write.csv(markers.clean.MAST_lam.all.fibros_08, file = file.path(data.folder,paste( "DE_cluster_AllMarkerGenes_MAST_lam.all.fibros_res08.csv")), row.names = FALSE)
+#markers.clean.MAST_lam.all.fibros_08 <- read.csv(file = file.path(data.folder,paste( "DE_cluster_AllMarkerGenes_MAST_lam.all.fibros_res08.csv")))
+
+markers.clean.MAST_lam.all.fibros_08_top10 <- markers.clean.MAST_lam.all.fibros_08 %>% group_by(cluster) %>% top_n(n = 20, wt = avg_log2FC)
+
+#write.csv(markers.clean.MAST_lam.all.fibros_08_top10, file = file.path(data.folder,paste0( "DE_cluster_AllMarkerGenes_MAST_lam.all.fibros_res08_top5.csv")), row.names = TRUE)
+```
+
+
+```{r, fig.width=20, fig.height=25}
+markers.clean.MAST_lam.all.fibros_08 <- read.csv(file = file.path(data.folder,paste( "DE_cluster_AllMarkerGenes_MAST_lam.all.fibros_res08.csv")))
+
+markers.clean.MAST_lam.all.fibros_08_top10 <- markers.clean.MAST_lam.all.fibros_08 %>% group_by(cluster) %>% top_n(n = 20, wt = avg_log2FC)
+
+DoHeatmap(lam.all.fibros, features = markers.clean.MAST_lam.all.fibros_08_top10$gene) + NoLegend()+scale_fill_viridis_c()
+```
+
+```{r}
+DimPlot(object = lam.all.fibros, reduction = 'umap',group.by = "all.fibros_res.0.8", label = T)
+```
+
+```{r}
+markers.clean.MAST_lam.all.fibros_08_top10
+```
+
+
+```{r. eval=FALSE}
+Idents(lam.all.fibros) <- lam.all.fibros$all.fibros_res.0.8
+
+x <- c(0:14)
+y <- c("mCAF","tpCAF","mCAF","rCAF","iCAF","other","apCAF","iCAF","Pericyte","iCAF","Epithelial","other","vCAF","iCAF","mt")
+cluster_names <- as.data.frame(cbind(x,y))
+colnames(cluster_names) <-c("Cluster","CAF_type")
+
+cluster_ft <- cluster_names$CAF_type
+cluster_ft <-as.character(cluster_ft)
+names(x = cluster_ft) <- levels(x = lam.all.fibros)
+lam.all.fibros <- RenameIdents(object = lam.all.fibros, cluster_ft)
+
+#Save celltype information in metadata
+lam.all.fibros[["cluster_ft"]] <- Idents(object = lam.all.fibros)
+
+saveRDS(lam.all.fibros, file=file.path(data.folder,"lung_all_fibros_workingfile_finalcluster.rds"))
+```
+
+```{r}
+x <- c(0:14)
+y <- c("mCAF","tpCAF","mCAF","rCAF","iCAF","other","apCAF","iCAF","Pericyte","iCAF","Epithelial","other","vCAF","iCAF","mt")
+cluster_names <- as.data.frame(cbind(x,y))
+colnames(cluster_names) <-c("Cluster","CAF_type")
+cluster_names
+```
+
+
+```{r}
+p <-DimPlot(object = lam.all.fibros, reduction = 'umap',group.by = "cluster_ft", label = F)
+plot(p)
+```
+
+```{r}
+df <- prop.table(x=table(lam.all.fibros$tissue, lam.all.fibros$cluster_ft), margin=2)
+df <- as.data.frame(df)
+colnames(df) <- c('Dataset', 'Cluster', 'Prop')
+
+p <-
+  ggplot(df, aes(x=Cluster, y = Prop, fill=Dataset)) +
+  #scale_fill_viridis(discrete=TRUE)+
+  geom_bar(stat="identity", position="fill")+
+  theme(axis.title.x=element_blank(), axis.title.y = element_blank())+
+  coord_flip()+
+  theme(panel.background = element_blank(), axis.text.x = element_text(hjust=1, angle=45))+
+  scale_fill_tableau()
+p
+#ggsave(p, file=file.path(data_folder, "lung","Barplot_CAF-tumourtype.pdf"))
+```
+
+```{r, eval=FALSE }
+Idents(lam.all.fibros) <- lam.all.fibros$cluster_ft
+
+markers.clean.MAST_lam.all.fibros_cluster_ft<- FindAllMarkers(object = lam.all.fibros, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+write.csv(markers.clean.MAST_lam.all.fibros_cluster_ft, file = file.path(data_folder,"lung",paste( "DE_cluster_AllMarkerGenes_MAST_lam.all.fibros_cluster_ft.csv")), row.names = FALSE)
+#markers.clean.MAST_lam.all.fibros_cluster_ft <- read.csv(file = file.path(data.folder,paste( "DE_cluster_AllMarkerGenes_MAST_lam.all.fibros_cluster_ft.csv")))
+
+markers.clean.MAST_lam.all.fibros_cluster_ft_top10 <- markers.clean.MAST_lam.all.fibros_cluster_ft %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+write.csv(markers.clean.MAST_lam.all.fibros_cluster_ft_top10, file = file.path(data_folder,"lung",paste0( "DE_cluster_AllMarkerGenes_MAST_lam.all.fibros_cluster_ft_top5.csv")), row.names = TRUE)
+```
+
+
+```{r, fig.width=12, fig.height=12 }
+Idents(lam.all.fibros) <- lam.all.fibros$cluster_ft
+markers.clean.MAST_lam.all.fibros_cluster_ft <- read.csv(file = file.path(data.folder,paste( "DE_cluster_AllMarkerGenes_MAST_lam.all.fibros_cluster_ft.csv")))
+
+markers.clean.MAST_lam.all.fibros_cluster_ft_top10 <- markers.clean.MAST_lam.all.fibros_cluster_ft %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+DoHeatmap(lam.all.fibros, features = markers.clean.MAST_lam.all.fibros_cluster_ft_top10$gene) + NoLegend()+scale_fill_viridis_c()
+
+```
+
+
+```{r, eval=FALSE}
+lam.all.fibros.tumour <- subset(x = lam.all.fibros, subset = tissue != "normal tissue")
+lam.all.fibros.tumour.mo <- subset(x = lam.all.fibros.tumour, subset = cluster_ft != "Epithelial"&
+                                     cluster_ft != "mt"&
+                                     cluster_ft != "other")
+
+
+saveRDS(lam.all.fibros.tumour, file=file.path(data.folder,"LUNG_tumour_fibros_RAW.rds"))
+saveRDS(lam.all.fibros.tumour.mo, file=file.path(data.folder,"LUNG_tumour_fibros_minusOTHER_RAW.rds"))
+
+lam.all.fibros.tumour$cluster_ft %>% table
+lam.all.fibros.tumour
+```
+
+```{r}
+lam.all.fibros.tumour.mo <- readRDS(file=file.path(data.folder,"LUNG_tumour_fibros_minusOTHER_RAW.rds"))
+```
+
+
+Gene set enrichment analysis
+```{r}
+#Hallmark genes
+h.human <- msigdbr(species="Homo sapiens",category="H")
+
+h.names <- unique(h.human$gs_name)
+
+h.sets <- vector("list",length=length(h.names))
+names(h.sets) <- h.names
+
+for (i in names(h.sets)) {
+    h.sets[[i]] <- pull(h.human[h.human$gs_name==i,"gene_symbol"])
+}
+```
+
+```{r}
+lam.all.fibros.tumour.mo$cluster_ft <- droplevels(lam.all.fibros.tumour.mo$cluster_ft)
+logfc.data <- singleseqgset::logFC(cluster.ids=lam.all.fibros.tumour.mo@meta.data$cluster_ft,
+                    expr.mat=lam.all.fibros.tumour.mo[["SCT"]]@scale.data )
+```
+
+```{r}
+gse.res <- wmw_gsea(expr.mat=lam.all.fibros.tumour.mo[["SCT"]]@scale.data,cluster.cells=logfc.data[[1]],log.fc.cluster=logfc.data[[2]],gene.sets=h.sets)
+```
+
+```{r}
+res.stats <- gse.res[["GSEA_statistics"]]
+res.pvals <- gse.res[["GSEA_p_values"]]
+
+res.pvals <- apply(res.pvals,2,p.adjust,method="fdr") #Correct for multiple comparisons
+
+res.stats[order(res.stats[,1],decreasing=TRUE)[1:10],] #Top gene sets enriched by z scores
+```
+
+```{r}
+res.pvals[order(res.stats[,1],decreasing=TRUE)[1:10],] #Top gene sets by p values
+```
+
+```{r, fig.width=8, fig.height=18}
+
+df <- res.stats
+df$hallmark <- rownames(df)
+df <- df %>%
+      mutate_at("hallmark", str_replace, "HALLMARK_", "")
+rownames(df) <- df$hallmark
+df$hallmark <-NULL
+
+rdylbu <-rev(brewer.pal(11,"RdYlBu"))
+
+
+pheatmap(as.matrix(df),  breaks = seq(-4, 4, length.out = 200),   color = colorRampPalette(c("navy", "white", "red"))(200))
+
+#pdf(file=file.path(data_folder, "lung","GSEA_CAFtypes_n_validation.pdf"), height=8, width=18)
+#pheatmap(t(as.matrix(df)),  breaks = seq(-4, 4, length.out = 200),   color = colorRampPalette(c("navy", "white", "red"))(200))
+#dev.off()
+```
