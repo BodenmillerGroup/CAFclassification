@@ -1,0 +1,1728 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r}
+wd <- dirname(getwd())
+plot_folder <- file.path(wd,"results")
+data_folder <- file.path(wd,"data")
+```
+
+```{r}
+set.seed(101100)
+```
+
+
+```{r, fig.width=25, fig.height=12}
+lung.fibro <- readRDS(file=file.path(data_folder, "lung","LUNG_tumour_fibros_minusOTHER_RAW.rds"))
+HNSCC.fibro <- readRDS(file=file.path(data_folder,"HNSCC", "HNSCC_tumour_fibros_clustered_me_minusOther.rds"))
+colon.fibro <- readRDS(file=file.path(data_folder,"colon","COLON_tumour_fibros_clustered_me_minusOther.rds"))
+pancreas.fibro.15 <- readRDS(file=file.path(data_folder,"pdac_gse15","pancreas_gse15_fibro_workingfile.rds"))
+
+
+lung.fibro$sample <- lung.fibro$sample
+lung.fibro$tumourtype <- "lung"
+
+HNSCC.fibro$sample <- HNSCC.fibro$orig.ident
+HNSCC.fibro$tumourtype <- "HNSCC"
+
+colon.fibro$sample <- colon.fibro$orig.ident
+colon.fibro$tumourtype <- "colon"
+
+pancreas.fibro.15$sample <- pancreas.fibro.15$orig.ident
+pancreas.fibro.15$tumourtype <- "PDAC"
+#make list
+#seurat.merge.all <- list(fibro.combined.all, lam.all.fibros, all.fibroblast)
+
+seurat.merge.all <- list(HNSCC.fibro, lung.fibro, colon.fibro, pancreas.fibro.15) #
+
+seurat.merge.all <- lapply(X = seurat.merge.all, FUN = function(x) {
+    x <- NormalizeData(x)
+    x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 2000)
+})
+
+features.all <- SelectIntegrationFeatures(object.list = seurat.merge.all)
+
+fibro.anchors.all <- FindIntegrationAnchors(object.list = seurat.merge.all, anchor.features = c(features.all,"FAP","NDRG1"))
+
+# this command creates an 'integrated' data assay
+fibro.combined.all <- IntegrateData(anchorset = fibro.anchors.all)
+saveRDS(fibro.combined.all, file=file.path(data_folder, "merge_pdac15",paste("lung_colon_HNSCC_PDAC15_integrated_RAW.RDS")))
+
+VlnPlot(fibro.combined.all, features=my_genes)
+```
+
+
+#Analysis
+
+```{r}
+# specify that we will perform downstream analysis on the corrected data note that the original
+# unmodified data still resides in the 'RNA' assay
+DefaultAssay(fibro.combined.all) <- "integrated"
+
+#fibro.combined.all <-FindVariableFeatures (fibro.combined.all, selection.method = "vst", nfeatures = 2000 )
+# Run the standard workflow for visualization and clustering
+fibro.combined.all <- ScaleData(fibro.combined.all, verbose = FALSE)
+fibro.combined.all <- RunPCA(fibro.combined.all, npcs = 30, verbose = FALSE)
+fibro.combined.all <- RunUMAP(fibro.combined.all, reduction = "pca", dims = 1:20)
+
+DimHeatmap(object = fibro.combined.all, dims = 1, cells = 500, balanced = TRUE)
+DimHeatmap(object = fibro.combined.all, dims = 10:30, cells = 500, balanced = TRUE)
+ElbowPlot(object = fibro.combined.all, ndims =30)
+
+fibro.combined.all <- RunUMAP(object = fibro.combined.all, dims = 1:15,)
+#fibro.combined.all <- RunTSNE(object = fibro.combined.all, dims = 1:30)
+
+DimPlot(object = fibro.combined.all, reduction = 'umap',group.by = "tumourtype", label = F, split.by = "tumourtype")#,cols = viridis(12)
+p <-DimPlot(object = fibro.combined.all, reduction = 'umap',group.by = "tumourtype", label = F)#,cols = viridis(12)
+plot(p)
+ggsave(p, file=file.path(data_folder,"merge_pdac15","UMAP_tumour.png"), dpi=300)
+
+saveRDS(fibro.combined.all, file=file.path(data_folder, "merge_pdac15",paste("lung_colon_HNSCC_PDAC15_integrated_workingfile.RDS")))
+
+```
+
+```{r}
+library(harmony)
+#all.fibroblast <- NormalizeData(all.fibroblast) %>% FindVariableFeatures() %>% ScaleData() %>% RunPCA(verbose = FALSE)
+#PCA 20
+fibro.combined.all.h <- RunHarmony(fibro.combined.all, group.by.vars = "tumourtype",assay.use = "integrated", dims.use = 1:15)
+
+fibro.combined.all.h <- RunUMAP(fibro.combined.all.h, reduction = "harmony", dims = 1:15)
+#all.fibroblast <- FindNeighbors(all.fibroblast, reduction = "harmony", dims = 1:30) %>% FindClusters()
+p <- DimPlot(fibro.combined.all.h, group.by = c("tumourtype"))#+scale_color_tableau("Tableau 20")
+plot(p)
+ggsave(p, file=file.path(data_folder,"merge_pdac15","UMAP_tumour_harmony.png"), dpi=300)
+
+
+DimPlot(fibro.combined.all.h, group.by = c("tumourtype"))#+scale_color_tableau("Tableau 20")
+#DimPlot(fibro.combined.all, group.by = c("phenotype_BC"))+scale_color_tableau("Tableau 20")
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "tumourtype", label = F, split.by = "tumourtype")#,cols = viridis(12)
+
+plot(p)#+scale_color_tableau("Tableau 20")
+#ggsave(p, file=file.path(plot_folder, "harmony_UMAPs.png"), width=12, height=6)
+saveRDS(fibro.combined.all, file=file.path(data_folder, "merge_pdac15",paste("lung_colon_HNSCC_PDAC15_integrated_workingfile_HARMONY.RDS")))
+```
+
+
+```{r}
+#Clustering
+fibro.combined.all.h <- FindNeighbors(fibro.combined.all.h, reduction = "harmony", dims = 1:15,graph.name = "integrated.fibros.all.small")
+#fibro.combined.all.h <- FindNeighbors(object = fibro.combined.all.h, dims = 1:20,graph.name = "integrated.fibros.all.small")
+fibro.combined.all.h <- FindClusters(object = fibro.combined.all.h, resolution = seq(from = 0.1, to = 1.5, by = 0.1), graph.name = "integrated.fibros.all.small")
+saveRDS(fibro.combined.all, file=file.path(data_folder, "merge_pdac15",paste("lung_colon_HNSCC_PDAC15_integrated_workingfile_HARMONY.RDS")))
+```
+
+```{r, fig.height=12, fig.width=12}
+library(clustree)
+
+p<-clustree(fibro.combined.all.h, prefix = "integrated.fibros.all.small_res.") #, exprs = "scale.data"
+plot(p)
+ggsave(p, file=file.path(data_folder,"merge_pdac15","clustree_merge_pdac15.pdf"))
+
+```
+
+
+```{r, fig.width=12}
+fibro.combined.all.h
+DefaultAssay(fibro.combined.all) <- "integrated"
+
+my_genes <-c("FAP","PDPN","ACTA2","PLA2G2A","CD34","CFD","MMP11","COL1A1","POSTN","MME","NDRG1","ENO1","RGS5","MCAM","CCL21","CCL19","HLA-DRA","CD74","MKI67","IDO1","HSPH1")
+
+p <-FeaturePlot(fibro.combined.all.h, features=my_genes,reduction="umap", ncol=4, cols=c("white","black")) &NoAxes()
+plot(p)
+ggsave(p, file=file.path(data_folder,"merge_pdac15","UMAP_featureplot_4.png"), dpi=300, height=12, width=12, units = "in")
+
+
+p <-FeaturePlot(fibro.combined.all.h, features=my_genes,reduction="umap", ncol=3, cols=c("white","black")) &NoAxes()
+plot(p)
+ggsave(p, file=file.path(data_folder,"merge_pdac15","UMAP_featureplot_4.png"), dpi=300, height=12, width=7, units = "in")
+
+p <-FeaturePlot(fibro.combined.all.h, features=my_genes,reduction="umap", ncol=7, cols=c("white","black")) &NoAxes()
+plot(p)
+ggsave(p, file=file.path(data_folder,"merge_pdac15","UMAP_featureplot_7.png"), dpi=300, height=7, width=18, units = "in")
+
+```
+
+```{r}
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "integrated.fibros.all.small_res.0.1", label = T)+labs(colour="integrated.fibros.all.small_res.0.1")+theme_void()
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "integrated.fibros.all.small_res.0.2", label = T)+labs(colour="integrated.fibros.all.small_res.0.2")+theme_void()
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "integrated.fibros.all.small_res.0.3", label = T)+labs(colour="integrated.fibros.all.small_res.0.3")+theme_void()
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "integrated.fibros.all.small_res.0.4", label = T)+labs(colour="integrated.fibros.all.small_res.0.4")+theme_void()
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "integrated.fibros.all.small_res.0.5", label = T)+labs(colour="integrated.fibros.all.small_res.0.5")+theme_void()
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "integrated.fibros.all.small_res.0.6", label = T)+labs(colour="integrated.fibros.all.small_res.0.6")+theme_void()
+
+p <-DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "integrated.fibros.all.small_res.0.7", label = T)+labs(colour="integrated.fibros.all.small_res.0.7")+theme_void()
+plot(p)
+ggsave(plot=p, file=file.path(data_folder,"merge_pdac15","umap_clusterno_res07.png"), dpi=300)
+
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "integrated.fibros.all.small_res.0.8", label = T)+labs(colour="integrated.fibros.all.small_res.0.8")+theme_void()
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "integrated.fibros.all.small_res.0.9", label = T)+labs(colour="integrated.fibros.all.small_res.0.9")+theme_void()
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "integrated.fibros.all.small_res.1", label = T)+labs(colour="integrated.fibros.all.small_res.1")+theme_void()
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "integrated.fibros.all.small_res.1.1", label = T)+labs(colour="integrated.fibros.all.small_res.1.1")+theme_void()
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "integrated.fibros.all.small_res.1.2", label = T)+labs(colour="integrated.fibros.all.small_res.1.2")+theme_void()
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "integrated.fibros.all.small_res.1.3", label = T)+labs(colour="integrated.fibros.all.small_res.1.3")+theme_void()
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "integrated.fibros.all.small_res.1.4", label = T)+labs(colour="integrated.fibros.all.small_res.1.4")+theme_void()
+
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "integrated.fibros.all.small_res.1.5", label = T)+labs(colour="integrated.fibros.all.small_res.1.5")+theme_void()
+
+```
+
+```{r res 0.1 integrated fibros, fig.width=20, fig.height=20}
+library(MAST)
+Idents(fibro.combined.all.h) <- fibro.combined.all.h$integrated.fibros.all.small_res.0.1
+
+markers.clean.MAST_integrated.fibro.all_small_01<- FindAllMarkers(object = fibro.combined.all.h, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+write.csv(markers.clean.MAST_integrated.fibro.all_small_01, file = file.path(data_folder,"merge_pdac15",paste( "DE_cluster_AllMarkerGenes_MAST_integrated_res01.csv")), row.names = FALSE)
+
+markers.clean.MAST_integrated.fibro.all_small_01_top10 <- markers.clean.MAST_integrated.fibro.all_small_01 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+write.csv(markers.clean.MAST_integrated.fibro.all_small_01_top10, file = file.path(data_folder,paste0( "DE_cluster_AllMarkerGenes_MAST_integrated_res01_top10.csv")), row.names = TRUE)
+
+p <-DoHeatmap(fibro.combined.all.h, features = markers.clean.MAST_integrated.fibro.all_small_01_top10$gene) + NoLegend()+scale_fill_viridis_c()
+plot(p)
+#FindMarkers(HNSCC.fibro, ident.1  = 3, min.pct = 0.5)
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "integrated.fibros.all.small_res.0.1", label = T)+labs(colour="integrated.fibros.all.small_res.0.1")+theme_void()
+markers.clean.MAST_integrated.fibro.all_small_01_top10
+```
+
+```{r res 0.2 integrated fibros, fig.width=20, fig.height=20}
+library(MAST)
+Idents(fibro.combined.all.h) <- fibro.combined.all.h$integrated.fibros.all.small_res.0.2
+
+markers.clean.MAST_integrated.fibro.all_small_02<- FindAllMarkers(object = fibro.combined.all.h, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+write.csv(markers.clean.MAST_integrated.fibro.all_small_02, file = file.path(data_folder,"merge_pdac15",paste( "DE_cluster_AllMarkerGenes_MAST_integrated_res02.csv")), row.names = FALSE)
+
+markers.clean.MAST_integrated.fibro.all_small_02_top10 <- markers.clean.MAST_integrated.fibro.all_small_02 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+write.csv(markers.clean.MAST_integrated.fibro.all_small_02_top10, file = file.path(data_folder,paste0( "DE_cluster_AllMarkerGenes_MAST_integrated_res02_top10.csv")), row.names = TRUE)
+
+p <-DoHeatmap(fibro.combined.all.h, features = markers.clean.MAST_integrated.fibro.all_small_02_top10$gene) + NoLegend()+scale_fill_viridis_c()
+plot(p)
+#FindMarkers(HNSCC.fibro, ident.1  = 3, min.pct = 0.5)
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "integrated.fibros.all.small_res.0.2", label = T)+labs(colour="integrated.fibros.all.small_res.0.2")+theme_void()
+
+markers.clean.MAST_integrated.fibro.all_small_02_top10
+```
+
+```{r res 0.3 integrated fibros, fig.width=20, fig.height=20}
+library(MAST)
+Idents(fibro.combined.all.h) <- fibro.combined.all.h$integrated.fibros.all.small_res.0.3
+
+markers.clean.MAST_integrated.fibro.all_small_03<- FindAllMarkers(object = fibro.combined.all.h, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+write.csv(markers.clean.MAST_integrated.fibro.all_small_03, file = file.path(data_folder,"merge_pdac15",paste( "DE_cluster_AllMarkerGenes_MAST_integrated_res03.csv")), row.names = FALSE)
+
+markers.clean.MAST_integrated.fibro.all_small_03_top10 <- markers.clean.MAST_integrated.fibro.all_small_03 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+write.csv(markers.clean.MAST_integrated.fibro.all_small_03_top10, file = file.path(data_folder,paste0( "DE_cluster_AllMarkerGenes_MAST_integrated_res03_top10.csv")), row.names = TRUE)
+
+p <-DoHeatmap(fibro.combined.all.h, features = markers.clean.MAST_integrated.fibro.all_small_03_top10$gene) + NoLegend()+scale_fill_viridis_c()
+plot(p)
+#FindMarkers(HNSCC.fibro, ident.1  = 3, min.pct = 0.5)
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "integrated.fibros.all.small_res.0.3", label = T)+labs(colour="integrated.fibros.all.small_res.0.3")+theme_void()
+
+markers.clean.MAST_integrated.fibro.all_small_03_top10
+```
+
+```{r res 0.4 integrated fibros, fig.width=20, fig.height=20}
+library(MAST)
+Idents(fibro.combined.all.h) <- fibro.combined.all.h$integrated.fibros.all.small_res.0.4
+
+markers.clean.MAST_integrated.fibro.all_small_04<- FindAllMarkers(object = fibro.combined.all.h, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+write.csv(markers.clean.MAST_integrated.fibro.all_small_04, file = file.path(data_folder,"merge_pdac15",paste( "DE_cluster_AllMarkerGenes_MAST_integrated_res04.csv")), row.names = FALSE)
+
+markers.clean.MAST_integrated.fibro.all_small_04_top10 <- markers.clean.MAST_integrated.fibro.all_small_04 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+write.csv(markers.clean.MAST_integrated.fibro.all_small_04_top10, file = file.path(data_folder,paste0( "DE_cluster_AllMarkerGenes_MAST_integrated_res04_top10.csv")), row.names = TRUE)
+
+p <-DoHeatmap(fibro.combined.all.h, features = markers.clean.MAST_integrated.fibro.all_small_04_top10$gene) + NoLegend()+scale_fill_viridis_c()
+plot(p)
+#FindMarkers(HNSCC.fibro, ident.1  = 3, min.pct = 0.5)
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "integrated.fibros.all.small_res.0.4", label = T)+labs(colour="integrated.fibros.all.small_res.0.4")+theme_void()
+
+markers.clean.MAST_integrated.fibro.all_small_04_top10
+```
+
+```{r res 0.5 integrated fibros, fig.width=20, fig.height=20}
+library(MAST)
+Idents(fibro.combined.all.h) <- fibro.combined.all.h$integrated.fibros.all.small_res.0.5
+
+markers.clean.MAST_integrated.fibro.all_small_05<- FindAllMarkers(object = fibro.combined.all.h, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+write.csv(markers.clean.MAST_integrated.fibro.all_small_05, file = file.path(data_folder,"merge_pdac15",paste( "DE_cluster_AllMarkerGenes_MAST_integrated_res05.csv")), row.names = FALSE)
+
+markers.clean.MAST_integrated.fibro.all_small_05_top10 <- markers.clean.MAST_integrated.fibro.all_small_05 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+write.csv(markers.clean.MAST_integrated.fibro.all_small_05_top10, file = file.path(data_folder,paste0( "DE_cluster_AllMarkerGenes_MAST_integrated_res05_top10.csv")), row.names = TRUE)
+
+p <-DoHeatmap(fibro.combined.all.h, features = markers.clean.MAST_integrated.fibro.all_small_05_top10$gene) + NoLegend()+scale_fill_viridis_c()
+plot(p)
+#FindMarkers(HNSCC.fibro, ident.1  = 3, min.pct = 0.5)
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "integrated.fibros.all.small_res.0.5", label = T)+labs(colour="integrated.fibros.all.small_res.0.5")+theme_void()
+
+markers.clean.MAST_integrated.fibro.all_small_05_top10
+```
+
+```{r res 0.6 integrated fibros, fig.width=20, fig.height=20}
+library(MAST)
+Idents(fibro.combined.all.h) <- fibro.combined.all.h$integrated.fibros.all.small_res.0.6
+
+markers.clean.MAST_integrated.fibro.all_small_06<- FindAllMarkers(object = fibro.combined.all.h, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+write.csv(markers.clean.MAST_integrated.fibro.all_small_06, file = file.path(data_folder,"merge_pdac15",paste( "DE_cluster_AllMarkerGenes_MAST_integrated_res06.csv")), row.names = FALSE)
+
+markers.clean.MAST_integrated.fibro.all_small_06_top10 <- markers.clean.MAST_integrated.fibro.all_small_06 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+write.csv(markers.clean.MAST_integrated.fibro.all_small_06_top10, file = file.path(data_folder,paste0( "DE_cluster_AllMarkerGenes_MAST_integrated_res06_top10.csv")), row.names = TRUE)
+
+p <-DoHeatmap(fibro.combined.all.h, features = markers.clean.MAST_integrated.fibro.all_small_06_top10$gene) + NoLegend()+scale_fill_viridis_c()
+plot(p)
+#FindMarkers(HNSCC.fibro, ident.1  = 3, min.pct = 0.5)
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "integrated.fibros.all.small_res.0.6", label = T)+labs(colour="integrated.fibros.all.small_res.0.6")+theme_void()
+
+markers.clean.MAST_integrated.fibro.all_small_06_top10
+```
+
+```{r res 0.5 integrated fibros, fig.width=20, fig.height=20}
+library(MAST)
+Idents(fibro.combined.all.h) <- fibro.combined.all.h$integrated.fibros.all.small_res.0.7
+
+markers.clean.MAST_integrated.fibro.all_small_07<- FindAllMarkers(object = fibro.combined.all.h, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+write.csv(markers.clean.MAST_integrated.fibro.all_small_07, file = file.path(data_folder,"merge_pdac15",paste( "DE_cluster_AllMarkerGenes_MAST_integrated_res07.csv")), row.names = FALSE)
+
+markers.clean.MAST_integrated.fibro.all_small_07_top10 <- markers.clean.MAST_integrated.fibro.all_small_07 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+write.csv(markers.clean.MAST_integrated.fibro.all_small_07_top10, file = file.path(data_folder,paste0( "DE_cluster_AllMarkerGenes_MAST_integrated_res07_top10.csv")), row.names = TRUE)
+
+p <-DoHeatmap(fibro.combined.all.h, features = markers.clean.MAST_integrated.fibro.all_small_07_top10$gene) + NoLegend()+scale_fill_viridis_c()
+plot(p)
+#FindMarkers(HNSCC.fibro, ident.1  = 3, min.pct = 0.5)
+markers.clean.MAST_integrated.fibro.all_small_07_top10
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "integrated.fibros.all.small_res.0.7", label = T)+labs(colour="integrated.fibros.all.small_res.0.7")+theme_void()
+markers.clean.MAST_integrated.fibro.all_small_07[markers.clean.MAST_integrated.fibro.all_small_07$cluster==2,]
+markers.clean.MAST_integrated.fibro.all_small_07[markers.clean.MAST_integrated.fibro.all_small_07$gene=="POSTN",]
+
+plot(p)
+ggsave(p, file=file.path(data_folder,"merge_pdac15","HM_res07_allgenes.pdf"))
+```
+
+
+```{r res 0.8 integrated fibros, fig.width=20, fig.height=20}
+library(MAST)
+Idents(fibro.combined.all.h) <- fibro.combined.all.h$integrated.fibros.all.small_res.0.8
+
+markers.clean.MAST_integrated.fibro.all_small_08<- FindAllMarkers(object = fibro.combined.all.h, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+write.csv(markers.clean.MAST_integrated.fibro.all_small_08, file = file.path(data_folder,"merge_pdac15",paste( "DE_cluster_AllMarkerGenes_MAST_integrated_res08_2.csv")), row.names = FALSE)
+
+markers.clean.MAST_integrated.fibro.all_small_08_top20 <- markers.clean.MAST_integrated.fibro.all_small_08 %>% group_by(cluster) %>% top_n(n = 20, wt = avg_log2FC)
+write.csv(markers.clean.MAST_integrated.fibro.all_small_08_top20, file = file.path(data_folder,paste0( "DE_cluster_AllMarkerGenes_MAST_integrated_res08_top20_2.csv")), row.names = TRUE)
+
+p <-DoHeatmap(fibro.combined.all.h, features = markers.clean.MAST_integrated.fibro.all_small_08_top20$gene) + NoLegend()+scale_fill_viridis_c()
+plot(p)
+#FindMarkers(HNSCC.fibro, ident.1  = 3, min.pct = 0.5)
+markers.clean.MAST_integrated.fibro.all_small_08_top20
+
+markers.clean.MAST_integrated.fibro.all_small_08[markers.clean.MAST_integrated.fibro.all_small_08$cluster =="13",]
+markers.clean.MAST_integrated.fibro.all_small_08[markers.clean.MAST_integrated.fibro.all_small_08$gene =="MME",]
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "integrated.fibros.all.small_res.0.8", label = T)+labs(colour="integrated.fibros.all.small_res.0.7")+theme_void()
+
+```
+
+```{r res 0.9 integrated fibros, fig.width=20, fig.height=20}
+library(MAST)
+Idents(fibro.combined.all.h) <- fibro.combined.all.h$integrated.fibros.all.small_res.0.9
+
+markers.clean.MAST_integrated.fibro.all_small_09<- FindAllMarkers(object = fibro.combined.all.h, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+write.csv(markers.clean.MAST_integrated.fibro.all_small_09, file = file.path(data_folder,"merge_pdac15",paste( "DE_cluster_AllMarkerGenes_MAST_integrated_res09.csv")), row.names = FALSE)
+
+markers.clean.MAST_integrated.fibro.all_small_09_top10 <- markers.clean.MAST_integrated.fibro.all_small_09 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+write.csv(markers.clean.MAST_integrated.fibro.all_small_09_top10, file = file.path(data_folder,paste0( "DE_cluster_AllMarkerGenes_MAST_integrated_res09_top10.csv")), row.names = TRUE)
+
+p <-DoHeatmap(fibro.combined.all.h, features = markers.clean.MAST_integrated.fibro.all_small_09_top10$gene) + NoLegend()+scale_fill_viridis_c()
+plot(p)
+#FindMarkers(HNSCC.fibro, ident.1  = 3, min.pct = 0.5)
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "integrated.fibros.all.small_res.0.9", label = T)+labs(colour="integrated.fibros.all.small_res.0.9")+theme_void()
+
+markers.clean.MAST_integrated.fibro.all_small_09_top10
+```
+
+```{r res 1.5 integrated fibros, fig.width=20, fig.height=20}
+library(MAST)
+Idents(fibro.combined.all.h) <- fibro.combined.all.h$integrated.fibros.all.small_res.1
+
+markers.clean.MAST_integrated.fibro.all_small_10<- FindAllMarkers(object = fibro.combined.all.h, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+write.csv(markers.clean.MAST_integrated.fibro.all_small_10, file = file.path(data_folder,"merge_pdac15",paste( "DE_cluster_AllMarkerGenes_MAST_integrated_res10.csv")), row.names = FALSE)
+
+markers.clean.MAST_integrated.fibro.all_small_10_top10 <- markers.clean.MAST_integrated.fibro.all_small_10 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+write.csv(markers.clean.MAST_integrated.fibro.all_small_10_top10, file = file.path(data_folder,paste0( "DE_cluster_AllMarkerGenes_MAST_integrated_res10_top10.csv")), row.names = TRUE)
+
+p <-DoHeatmap(fibro.combined.all.h, features = markers.clean.MAST_integrated.fibro.all_small_10_top10$gene) + NoLegend()+scale_fill_viridis_c()
+plot(p)
+#FindMarkers(HNSCC.fibro, ident.1  = 3, min.pct = 0.5)
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "integrated.fibros.all.small_res.1.5", label = T)+labs(colour="integrated.fibros.all.small_res.1.5")+theme_void()
+
+markers.clean.MAST_integrated.fibro.all_small_10_top10
+```
+
+```{r res 1.5 integrated fibros, fig.width=20, fig.height=20}
+library(MAST)
+Idents(fibro.combined.all.h) <- fibro.combined.all.h$integrated.fibros.all.small_res.1.5
+
+markers.clean.MAST_integrated.fibro.all_small_15<- FindAllMarkers(object = fibro.combined.all.h, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+write.csv(markers.clean.MAST_integrated.fibro.all_small_15, file = file.path(data_folder,"merge_pdac15",paste( "DE_cluster_AllMarkerGenes_MAST_integrated_res15.csv")), row.names = FALSE)
+
+markers.clean.MAST_integrated.fibro.all_small_15_top10 <- markers.clean.MAST_integrated.fibro.all_small_15 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+write.csv(markers.clean.MAST_integrated.fibro.all_small_15_top10, file = file.path(data_folder,paste0( "DE_cluster_AllMarkerGenes_MAST_integrated_res15_top10.csv")), row.names = TRUE)
+
+p <-DoHeatmap(fibro.combined.all.h, features = markers.clean.MAST_integrated.fibro.all_small_15_top10$gene) + NoLegend()+scale_fill_viridis_c()
+plot(p)
+#FindMarkers(HNSCC.fibro, ident.1  = 3, min.pct = 0.5)
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "integrated.fibros.all.small_res.1.5", label = T)+labs(colour="integrated.fibros.all.small_res.1.5")+theme_void()
+
+markers.clean.MAST_integrated.fibro.all_small_15_top10
+```
+
+
+```{r}
+library(ggthemes)
+df <- prop.table(x=table(fibro.combined.all.h$tissue, fibro.combined.all.h$integrated.fibros.all.small_res.0.8), margin=2)
+df <- as.data.frame(df)
+colnames(df) <- c('Dataset', 'Cluster', 'Prop')
+
+p <-
+  ggplot(df, aes(x=Cluster, y = Prop, fill=Dataset)) +
+  #scale_fill_viridis(discrete=TRUE)+
+  geom_bar(stat="identity", position="fill")+
+  theme(axis.title.x=element_blank(), axis.title.y = element_blank())+
+  coord_flip()+
+  theme(panel.background = element_blank(), axis.text.x = element_text(hjust=1, angle=45))+
+  ggtitle('CAF phenotype distribution per patient')+
+  scale_fill_tableau()
+  #scale_fill_viridis_d()+
+  #scale_fill_manual(values=mycolors)
+p
+```
+
+```{r}
+
+Idents(fibro.combined.all.h) <- fibro.combined.all.h$integrated.fibros.all.small_res.0.7
+x <- c(0,1,10,11,12,13,2,3,4,5,6,7,8,9)
+y <- c("iCAF","mCAF", "other", "dCAF", "apCAF", "other", "mCAF","pericyte", "dCAF", "vCAF+rCAF", "mCAF", "tpCAF", "iCAF", "other")
+
+cluster_names <- as.data.frame(cbind(x,y))
+colnames(cluster_names) <-c("Cluster","CAF_type")
+
+cluster_ft <- cluster_names$CAF_type
+cluster_ft <-as.character(cluster_ft)
+names(x = cluster_ft) <- levels(x = fibro.combined.all.h)
+fibro.combined.all.h <- RenameIdents(object = fibro.combined.all.h, cluster_ft)
+
+#Save celltype information in metadata
+fibro.combined.all.h[["CAFtype"]] <- Idents(object = fibro.combined.all.h)
+saveRDS(fibro.combined.all.h, file=file.path(data_folder,"merge_pdac15", "lung_colon_HNSCC_ODAC15_integrated_clustered.rds"))
+```
+
+```{r}
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "integrated.fibros.all.small_res.0.8", label = T)+labs(colour="integrated.fibros.all.small_res.0.8")+theme_void()
+
+p <-DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "CAFtype", label = F)+labs(colour="CAFtype")+theme_void()+scale_color_tableau()
+plot(p)
+ggsave(plot=p, file=file.path(data_folder,"merge_pdac15","UMAP_CAFtype_pdac15_tableau.png"), dpi=300)
+
+p <-DimPlot(object = all.final, reduction = 'umap',group.by = "CAFtype_2", label = F)+labs(colour="CAFtype_1")+theme_void()
+ggsave(p, file=file.path(data_folder, "integrated_final_UMAP_CAFtypes_noLabel.png"), dpi=300)
+
+p <-DimPlot(object = all.final, reduction = 'umap',group.by = "tissue", label = F)+labs(colour="CAFtype_1")+theme_void()
+ggsave(p, file=file.path(data_folder, "integrated_final_UMAP_tissue.png"), dpi=300)
+```
+```{r res 0.5 integrated fibros, fig.width=20, fig.height=20}
+library(MAST)
+Idents(fibro.combined.all.h) <- fibro.combined.all.h$CAFtype
+
+markers.clean.MAST_integrated.fibro.all_small_caf<- FindAllMarkers(object = fibro.combined.all.h, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+write.csv(markers.clean.MAST_integrated.fibro.all_small_caf, file = file.path(data_folder,"merge_pdac15",paste( "DE_cluster_AllMarkerGenes_MAST_integrated_caftype.csv")), row.names = FALSE)
+
+markers.clean.MAST_integrated.fibro.all_small_caf_top10 <- markers.clean.MAST_integrated.fibro.all_small_caf %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+write.csv(markers.clean.MAST_integrated.fibro.all_small_caf_top10, file = file.path(data_folder,paste0( "DE_cluster_AllMarkerGenes_MAST_integrated_caftype_top10.csv")), row.names = TRUE)
+
+p <-DoHeatmap(fibro.combined.all.h, features = markers.clean.MAST_integrated.fibro.all_small_caf_top10$gene) + NoLegend()+scale_fill_viridis_c()
+plot(p)
+#FindMarkers(HNSCC.fibro, ident.1  = 3, min.pct = 0.5)
+markers.clean.MAST_integrated.fibro.all_small_caf_top10
+DimPlot(object = fibro.combined.all.h, reduction = 'umap',group.by = "CAFtype", label = T)+labs(colour="CAFtype")+theme_void()
+
+plot(p)
+ggsave(p, file=file.path(data_folder,"merge_pdac15","HM_CAFtype_allgenes.pdf"))
+```
+
+
+```{r}
+Idents(fibro.combined.all.h.mO) <- fibro.combined.all.h.mO$CAFtype
+avgexp = AverageExpression(fibro.combined.all.h.mO, return.seurat = T, add.ident = 'CAFtype')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+plot(p)
+
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F ) +scale_fill_viridis()
+plot(p)
+
+ggsave(p, file=file.path(data_folder,"merge_pdac15","HM_mygenes_mergepdac15.pdf"), width=6, height=8)
+```
+
+
+```{r}
+fibro.combined.all.h.mO <- subset(x = fibro.combined.all.h, subset = CAFtype != "other")
+saveRDS(fibro.combined.all.h.mO, file=file.path(data_folder,"merge_pdac15", "lung_colon_HNSCC_ODAC15_integrated_clustered_minusOTHER.rds"))
+fibro.combined.all.h$tumourtype %>% table
+fibro.combined.all.h.mO$tumourtype %>% table
+
+```
+
+
+```{r}
+library(ggthemes)
+#datasets per caf type
+df <- prop.table(x=table(fibro.combined.all.h$tumourtype, fibro.combined.all.h$CAFtype), margin=2)
+df <- as.data.frame(df)
+colnames(df) <- c('Dataset', 'Cluster', 'Prop')
+
+
+p <-
+  ggplot(df, aes(x=Cluster, y = Prop, fill=Dataset)) +
+  #scale_fill_viridis(discrete=TRUE)+
+  geom_bar(stat="identity", position="fill")+
+  theme(axis.title.x=element_blank(), axis.title.y = element_blank())+
+  coord_flip()+
+  theme(panel.background = element_blank(), axis.text.x = element_text(hjust=1, angle=45))+
+  ggtitle('Dataset distribution per CAF type')+
+  scale_fill_tableau()
+  #scale_fill_viridis_d()+
+  #scale_fill_manual(values=mycolors)
+p
+
+ggsave(p, file=file.path(data_folder,"merge_pdac15", "tumour_types_over_CAFtype.pdf"))
+#ggsave(p, file=file.path(plot_folder, "tumour_types_over_CAFtype.png"), width=7, height=4)
+#caf type per dataset
+df <- prop.table(x=table(fibro.combined.all.h$tumourtype, fibro.combined.all.h$CAFtype), margin=1)
+df <- as.data.frame(df)
+colnames(df) <- c('Dataset', 'Cluster', 'Prop')
+df$Cluster <- factor(df$Cluster)
+p <-
+  ggplot(df, aes(y=Prop, x = Dataset, fill=Cluster)) +
+  #scale_fill_viridis(discrete=TRUE)+
+  geom_bar(stat="identity", position="fill")+
+  theme(axis.title.x=element_blank(), axis.title.y = element_blank())+
+  coord_flip()+
+  theme(panel.background = element_blank(), axis.text.x = element_text(hjust=1, angle=45))+
+  ggtitle('CAF phenotype distribution per Dataset')#+
+  #scale_fill_tableau()
+  #scale_fill_viridis_d()+
+  #scale_fill_manual(values=mycolors)
+p
+ggsave(p, file=file.path(data_folder,"merge_pdac15", "CAFtypes_over_tumour_type_gg.pdf"))
+```
+
+
+```{r, Phenotypes per patients barplot}
+#absolute numbers per patient
+df <- table(fibro.combined.all.h$tumourtype, fibro.combined.all.h$CAFtype)
+df <- as.data.frame(df)
+colnames(df) <- c('Tumour', 'CAFtype', 'Freq')
+
+p <-
+  ggplot(df, aes(x=reorder(CAFtype,-Freq), y = Freq, fill=Tumour)) +
+  #scale_fill_viridis(discrete=TRUE)+
+  geom_bar(stat="identity",)+
+  theme(axis.title.x=element_blank(), axis.title.y = element_blank())+
+  coord_flip()+
+  theme(panel.background = element_blank(), axis.text.x = element_text(hjust=1, angle=45))+
+  ggtitle('CAF phenotype distribution per patient')+
+ scale_fill_tableau()
+plot(p)
+ggsave(file=file.path(data_folder,"merge_pdac15",paste0('Barplot_CAFtype_N_CAFtype_tableau_integrated.pdf')))
+
+
+#absolute numbers per tumour
+df <- table(fibro.combined.all.h$CAFtype, fibro.combined.all.h$tumourtype)
+df <- as.data.frame(df)
+colnames(df) <- c('Type', 'Sample', 'Freq')
+
+p <-
+  ggplot(df, aes(x=reorder(Sample,-Freq), y = Freq, fill=Type)) +
+  #scale_fill_viridis(discrete=TRUE)+
+  geom_bar(stat="identity",)+
+  theme(axis.title.x=element_blank(), axis.title.y = element_blank())+
+  coord_flip()+
+  theme(panel.background = element_blank(), axis.text.x = element_text(hjust=1, angle=45))+
+  ggtitle('CAF phenotype distribution per patient')#+
+ # scale_fill_tableau()
+p
+ggsave(file=file.path(data_folder,"merge_pdac15",paste0('Barplot_CAFtype_N_patients_gg_integrated.pdf')))
+```
+
+#subset
+#clustering over subset of markers
+
+```{r, genes to use}
+#defined key markers
+my_genes <-c("FAP","PDPN","ACTA2","PLA2G2A","CD34","CFD","MMP11","COL1A1","POSTN","MME","NDRG1","ENO1","RGS5","MCAM","CCL21","CL19","HLA-DR","CD74","MKI67","IDO1","HSPH1")
+```
+
+
+```{r, fig.width=20, fig.height=20}
+#make subsample from genes to use
+subsample.all.15 <- subset(fibro.combined.all.h, features = my_genes)
+
+#build graph
+subsample.all.15 <- FindNeighbors(object = subsample.all.15, dims = 1:15, graph.name = "sub.SNN")
+
+#cluster
+subsample.all.15 <- FindClusters(object = subsample.all.15, resolution = seq(from = 0.1, to = 1.5, by = 0.1),graph.name = "sub.SNN")
+
+library(clustree)
+#clustree
+p_c<-clustree(subsample.all.15, prefix = "sub.SNN_res.", exprs = "scale.data")
+
+plot(p_c)
+#ggsave(p_c, file=file.path(results.folder, paste("clustree_subsample.all.15_markergenes.pdf")))
+```
+
+```{r, Heatmap for differentially expressed genes per cluster marker genes}
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.0.1
+
+markers_subsample.all.15_01 <- FindAllMarkers(object = subsample.all.15, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+
+markers_subsample.all.15_01_top10 <- markers_subsample.all.15_01 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+
+
+p <-DoHeatmap(subsample.all.15, features=my_genes) + NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_subsample.all.15_MARKERgenes_res01.png")), width=10, height=10, dpi=300)
+
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.0.1
+avgexp = AverageExpression(subsample.all.15, return.seurat = T, add.ident = 'sub.SNN_res.0.1')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+
+p <-DoHeatmap(subsample.all.15, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_phenotypes_sub_MARKER_allcells.png")), width=10, height=10)
+```
+
+
+
+```{r, Heatmap for differentially expressed genes per cluster marker genes}
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.0.4
+
+markers_subsample.all.15_04 <- FindAllMarkers(object = subsample.all.15, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+
+markers_subsample.all.15_04_top10 <- markers_subsample.all.15_04 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+
+
+p <-DoHeatmap(subsample.all.15, features=my_genes) + NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_subsample.all.15_MARKERgenes_res04.png")), width=10, height=10, dpi=300)
+
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.0.4
+avgexp = AverageExpression(subsample.all.15, return.seurat = T, add.ident = 'sub.SNN_res.0.4')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+
+p <-DoHeatmap(subsample.all.15, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_phenotypes_sub_MARKER_allcells.png")), width=10, height=10)
+```
+
+
+
+```{r, Heatmap for differentially expressed genes per cluster marker genes}
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.0.5
+
+markers_subsample.all.15_05 <- FindAllMarkers(object = subsample.all.15, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+
+markers_subsample.all.15_05_top10 <- markers_subsample.all.15_05 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+
+
+p <-DoHeatmap(subsample.all.15, features=my_genes) + NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_subsample.all.15_MARKERgenes_res05.png")), width=10, height=10, dpi=300)
+
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.0.5
+avgexp = AverageExpression(subsample.all.15, return.seurat = T, add.ident = 'sub.SNN_res.0.5')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+
+p <-DoHeatmap(subsample.all.15, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_phenotypes_sub_MARKER_allcells.png")), width=10, height=10)
+```
+
+```{r, Heatmap for differentially expressed genes per cluster marker genes}
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.0.6
+
+markers_subsample.all.15_06 <- FindAllMarkers(object = subsample.all.15, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+
+markers_subsample.all.15_06_top10 <- markers_subsample.all.15_06 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+
+
+p <-DoHeatmap(subsample.all.15, features=my_genes) + NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_subsample.all.15_MARKERgenes_res06.png")), width=10, height=10, dpi=300)
+
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.0.6
+avgexp = AverageExpression(subsample.all.15, return.seurat = T, add.ident = 'sub.SNN_res.0.6')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+
+p <-DoHeatmap(subsample.all.15, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_phenotypes_sub_MARKER_allcells.png")), width=10, height=10)
+```
+
+```{r, Heatmap for differentially expressed genes per cluster marker genes}
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.0.7
+
+markers_subsample.all.15_07 <- FindAllMarkers(object = subsample.all.15, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+
+markers_subsample.all.15_07_top10 <- markers_subsample.all.15_07 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+
+
+p <-DoHeatmap(subsample.all.15, features=my_genes) + NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_subsample.all.15_MARKERgenes_res04.png")), width=10, height=10, dpi=300)
+
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.0.7
+avgexp = AverageExpression(subsample.all.15, return.seurat = T, add.ident = 'sub.SNN_res.0.7')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+
+p <-DoHeatmap(subsample.all.15, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_phenotypes_sub_MARKER_allcells.png")), width=10, height=10)
+```
+```{r, Sankey plot using marker genes, fig.width=20, fig.height=10}
+library(ggalluvial)
+tdat_seurat_all <-data.frame(subsample.all.15$CAFtype, subsample.all.15$sub.SNN_res.0.8)
+
+#pre <-data.frame(t(apply(tdat, 1, sort, na.last = T)))
+#pre$X2 <-NULL
+colnames(tdat_seurat_all) <-c("Phenotype_all","Phenotype_sub")
+tdat_seurat_all$cellID <-rownames(tdat_seurat_all)
+
+#tdat_seurat_all$Phenotype_new  <- ordered(tdat_seurat_all$Phenotype_new , levels = c("vCAF", "Pericyte", "mCAF","iCAF","tpCAF","hsp_tpCAF","IDO_CAF", "dCAF","rCAF","apCAF"))
+
+#df.f <-dplyr::rename(dplyr::count(tdat_seurat_all, Phenotype_all, Cluster_05,Phenotype_new), Freq = n)
+df.f <-dplyr::rename(dplyr::count(tdat_seurat_all, Phenotype_all,Phenotype_sub), Freq = n)
+
+#sankey plot 4 categories
+
+#,axis2=Cluster_05
+#,"Cluster_05"
+p <-ggplot(data = df.f,
+       aes(axis1 =Phenotype_all,axis3 = Phenotype_sub,
+           y = Freq)) +
+  scale_x_discrete(limits = c("all Phenotype","new Phenotype"),
+                   expand = c(0.01, .001)) +
+  #xlab("CAF type distribution") +
+  ylab("Absolute number of cells")+
+  geom_alluvium(aes(fill = Phenotype_sub)) +
+  geom_stratum(width=0.3) +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum),size=15)) +
+  theme(panel.background = element_blank(),
+        legend.title = element_text(size=15),
+        legend.text = element_text(size=15),
+        axis.text.x = element_text(color="black", size=15, face="bold"),
+        axis.title.y = element_text(color="black", size=15, face="bold"),
+        axis.text.y = element_text(color="black", size=15))+
+  labs(fill="Phenotype as of scRNAseq")
+
+ # ggtitle("passengers on the maiden voyage of the Titanic")
+plot(p)
+
+#ggsave(plot=p, file=file.path(data_folder,"Sankey_Allgenes_vs_markerGenes.pdf"))
+#ggsave(plot=p, file=file.path(data_folder,"Sankey_old_new_clustering_minusCluster.png"), width=20, height=10)
+
+
+
+#CAFtype_subsample.all.15
+
+tdat_seurat_all <-data.frame(subsample.all.15$CAFtype, subsample.all.15$CAFtype_subsample.all.15)
+
+#pre <-data.frame(t(apply(tdat, 1, sort, na.last = T)))
+#pre$X2 <-NULL
+colnames(tdat_seurat_all) <-c("Phenotype_all","Phenotype_sub")
+tdat_seurat_all$cellID <-rownames(tdat_seurat_all)
+
+#tdat_seurat_all$Phenotype_new  <- ordered(tdat_seurat_all$Phenotype_new , levels = c("vCAF", "Pericyte", "mCAF","iCAF","tpCAF","hsp_tpCAF","IDO_CAF", "dCAF","rCAF","apCAF"))
+
+#df.f <-dplyr::rename(dplyr::count(tdat_seurat_all, Phenotype_all, Cluster_05,Phenotype_new), Freq = n)
+df.f <-dplyr::rename(dplyr::count(tdat_seurat_all, Phenotype_all,Phenotype_sub), Freq = n)
+
+#sankey plot 4 categories
+
+#,axis2=Cluster_05
+#,"Cluster_05"
+p <-ggplot(data = df.f,
+       aes(axis1 =Phenotype_all,axis3 = Phenotype_sub,
+           y = Freq)) +
+  scale_x_discrete(limits = c("all Phenotype","new Phenotype"),
+                   expand = c(0.01, .001)) +
+  #xlab("CAF type distribution") +
+  ylab("Absolute number of cells")+
+  geom_alluvium(aes(fill = Phenotype_sub)) +
+  geom_stratum(width=0.3) +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum),size=15)) +
+  theme(panel.background = element_blank(),
+        legend.title = element_text(size=15),
+        legend.text = element_text(size=15),
+        axis.text.x = element_text(color="black", size=15, face="bold"),
+        axis.title.y = element_text(color="black", size=15, face="bold"),
+        axis.text.y = element_text(color="black", size=15))+
+  labs(fill="Phenotype as of scRNAseq")
+
+ # ggtitle("passengers on the maiden voyage of the Titanic")
+plot(p)
+ggsave(plot=p, file=file.path(data_folder,"merge_pdac15","Sankey_allgenes_vs_merkergenes.pdf"))
+
+```
+
+
+```{r}
+
+p <-DimPlot(object = subsample.all.15, reduction = 'umap', label = F)+labs(colour="CAFtype_subsample.all.15")+theme_void()
+plot(p)
+ggsave(p, file=file.path(data_folder,"merge_pdac15", "integrated_final_UMAP_CAFtype_subsample.png"), dpi=300)
+
+
+```
+
+
+```{r, Heatmap for differentially expressed genes per cluster marker genes}
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.0.8
+
+markers_subsample.all.15_08 <- FindAllMarkers(object = subsample.all.15, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+
+markers_subsample.all.15_08_top10 <- markers_subsample.all.15_08 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+
+
+p <-DoHeatmap(subsample.all.15, features=my_genes) + NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_subsample.all.15_MARKERgenes_res04.png")), width=10, height=10, dpi=300)
+
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.0.8
+avgexp = AverageExpression(subsample.all.15, return.seurat = T, add.ident = 'sub.SNN_res.0.8')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+
+p <-DoHeatmap(subsample.all.15, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_phenotypes_sub_MARKER_allcells.png")), width=10, height=10)
+```
+
+```{r, add type labels, fig.height=6, fig.width=6}
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.0.8
+
+#add structural CAFs (sCAFs)/ activated CAFs (aCAFs) to labels
+x <- c(0:15)
+y <-c("iCAF", "mCAF", "mCAF", "rCAF+pericyte", "Pericyte", "tpCAF", "IDO_CAF", "iCAF", "Pericyte",  "tpCAF", "iCAF" , "rCAF+pericyte","iCAF","iCAF","dCAF","apCAF")
+
+cluster_type <- as.data.frame(cbind(x,y))
+colnames(cluster_type) <-c("Cluster","CAFtype")
+
+meta2 <- cluster_type$CAFtype
+meta2 <-as.character(meta2)
+names(x = meta2) <- levels(x = subsample.all.15)
+subsample.all.15 <- RenameIdents(object = subsample.all.15, meta2)
+
+#Save celltype information in metadata
+subsample.all.15[["CAFtype_subsample.all.15"]] <- Idents(object = subsample.all.15)
+saveRDS(subsample.all.15, file=file.path(data_folder,"merge_pdac15","integrated_final_clustering-subsample.all.15.rds"))
+#subsample.all.15 <-readRDS(file=file.path(data_folder,"integrated_final_clustering-subsample.all.15.rds"))
+
+
+Idents(subsample.all.15) <- subsample.all.15$CAFtype_subsample.all.15
+avgexp = AverageExpression(subsample.all.15, return.seurat = T, add.ident = 'CAFtype_subsample.all.15')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+
+ggsave(plot=p, file=file.path(data_folder,"merge_pdac15","HM_clustered_by_markergenes.pdf"))
+
+```
+
+
+```{r, Heatmap for differentially expressed genes per cluster marker genes}
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.0.9
+
+markers_subsample.all.15_09 <- FindAllMarkers(object = subsample.all.15, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+
+markers_subsample.all.15_09_top10 <- markers_subsample.all.15_09 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+
+
+p <-DoHeatmap(subsample.all.15, features=my_genes) + NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_subsample.all.15_MARKERgenes_res04.png")), width=10, height=10, dpi=300)
+
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.0.9
+avgexp = AverageExpression(subsample.all.15, return.seurat = T, add.ident = 'sub.SNN_res.0.9')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+
+p <-DoHeatmap(subsample.all.15, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_phenotypes_sub_MARKER_allcells.png")), width=10, height=10)
+```
+
+```{r, Heatmap for differentially expressed genes per cluster marker genes}
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.1
+
+markers_subsample.all.15_1 <- FindAllMarkers(object = subsample.all.15, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+
+markers_subsample.all.15_1_top10 <- markers_subsample.all.15_1 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+
+
+p <-DoHeatmap(subsample.all.15, features=my_genes) + NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_subsample.all.15_MARKERgenes_res04.png")), width=10, height=10, dpi=300)
+
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.1
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+
+p <-DoHeatmap(subsample.all.15, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_phenotypes_sub_MARKER_allcells.png")), width=10, height=10)
+```
+
+```{r, Heatmap for differentially expressed genes per cluster marker genes}
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.1.5
+
+markers_subsample.all.15_15 <- FindAllMarkers(object = subsample.all.15, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+
+markers_subsample.all.15_15_top10 <- markers_subsample.all.15_15 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+
+
+p <-DoHeatmap(subsample.all.15, features=my_genes) + NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_subsample.all.15_MARKERgenes_res04.png")), width=10, height=10, dpi=300)
+
+avgexp = AverageExpression(subsample.all.15, return.seurat = T, add.ident = 'sub.SNN_res.1.5')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+
+p <-DoHeatmap(subsample.all.15, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_phenotypes_sub_MARKER_allcells.png")), width=10, height=10)
+```
+
+```{r, add type labels, fig.height=12, fig.width=6}
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.0.7
+
+#add structural CAFs (sCAFs)/ activated CAFs (aCAFs) to labels
+x <- c(0:12)
+y <-c("mCAF", "iCAF", "IDO_CAF", "Pericyte", "tpCAF", "Pericyte", "iCAF", "iCAF", "rCAF",  "Pericyte", "apCAF_rCAF" , "iCAF","dCAF")
+cluster_type <- as.data.frame(cbind(x,y))
+colnames(cluster_type) <-c("Cluster","CAFtype")
+
+meta2 <- cluster_type$CAFtype
+meta2 <-as.character(meta2)
+names(x = meta2) <- levels(x = subsample.all.15)
+subsample.all.15 <- RenameIdents(object = subsample.all.15, meta2)
+
+#Save celltype information in metadata
+subsample.all.15[["CAFtype_subsample.all.15"]] <- Idents(object = subsample.all.15)
+saveRDS(subsample.all.15, file=file.path(data_folder,"integrated_final_clustering-subsample.all.15.rds"))
+subsample.all.15 <-readRDS(file=file.path(data_folder,"integrated_final_clustering-subsample.all.15.rds"))
+
+```
+
+```{r}
+#res 07
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.0.7
+avgexp = AverageExpression(subsample.all.15, return.seurat = T, add.ident = 'sub.SNN_res.0.7')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))+scale_fill_viridis()#+ NoLegend()+scale_fill_viridis()
+p
+ggsave(p, file=file.path(data_folder, "subsample.all.15_res07_CAFtype_HM_vr.pdf"))
+
+#CAF type subsample.all.15
+Idents(subsample.all.15) <- subsample.all.15$CAFtype_subsample.all.15
+avgexp = AverageExpression(subsample.all.15, return.seurat = T, add.ident = 'CAFtype_subsample.all.15')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))+scale_fill_viridis()#+ NoLegend()+scale_fill_viridis()
+p
+
+ggsave(p, file=file.path(data_folder, "subsample.all.15_CAFtype_HM_vr.pdf"))
+```
+
+
+```{r, Sankey plot using marker genes, fig.width=20, fig.height=10}
+library(ggalluvial)
+tdat_seurat_all <-data.frame(subsample.all.15$CAFtype_2, subsample.all.15$CAFtype_subsample.all.15)
+
+#pre <-data.frame(t(apply(tdat, 1, sort, na.last = T)))
+#pre$X2 <-NULL
+colnames(tdat_seurat_all) <-c("Phenotype_all","Phenotype_sub")
+tdat_seurat_all$cellID <-rownames(tdat_seurat_all)
+
+#tdat_seurat_all$Phenotype_new  <- ordered(tdat_seurat_all$Phenotype_new , levels = c("vCAF", "Pericyte", "mCAF","iCAF","tpCAF","hsp_tpCAF","IDO_CAF", "dCAF","rCAF","apCAF"))
+
+#df.f <-dplyr::rename(dplyr::count(tdat_seurat_all, Phenotype_all, Cluster_05,Phenotype_new), Freq = n)
+df.f <-dplyr::rename(dplyr::count(tdat_seurat_all, Phenotype_all,Phenotype_sub), Freq = n)
+
+#sankey plot 4 categories
+
+#,axis2=Cluster_05
+#,"Cluster_05"
+p <-ggplot(data = df.f,
+       aes(axis1 =Phenotype_all,axis3 = Phenotype_sub,
+           y = Freq)) +
+  scale_x_discrete(limits = c("all Phenotype","new Phenotype"),
+                   expand = c(0.01, .001)) +
+  #xlab("CAF type distribution") +
+  ylab("Absolute number of cells")+
+  geom_alluvium(aes(fill = Phenotype_sub)) +
+  geom_stratum(width=0.3) +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum),size=15)) +
+  theme(panel.background = element_blank(),
+        legend.title = element_text(size=15),
+        legend.text = element_text(size=15),
+        axis.text.x = element_text(color="black", size=15, face="bold"),
+        axis.title.y = element_text(color="black", size=15, face="bold"),
+        axis.text.y = element_text(color="black", size=15))+
+  labs(fill="Phenotype as of scRNAseq")
+
+ # ggtitle("passengers on the maiden voyage of the Titanic")
+plot(p)
+
+ggsave(plot=p, file=file.path(data_folder,"Sankey_Allgenes_vs_markerGenes.pdf"))
+#ggsave(plot=p, file=file.path(data_folder,"Sankey_old_new_clustering_minusCluster.png"), width=20, height=10)
+
+```
+```{r}
+df_sub <-data.frame(subsample.all.15@meta.data$CellID, subsample.all.15@meta.data$CAFtype_subsample.all.15)
+colnames(df_sub) <- c("CellID","CAFtype_subsample.all.15")
+
+all.final@meta.data <-left_join(all.final@meta.data,df_sub, by="CellID")
+
+saveRDS(all.final, file=file.path(data_folder, "all_final_all_clustered_sub.RDS"))
+```
+
+```{r}
+cluster_letters <- Idents(object = subsample.all.15)
+names(cluster_letters) <- colnames(x = subsample.all.15)
+
+all.final.gsea <- AddMetaData(
+  object = all.final.gsea,
+  metadata = cluster_letters,
+  col.name = 'CAF_sub'
+)
+table(all.final.gsea$CAF_sub, all.final.gsea$CAFtype_2)
+```
+
+```{r, Heatmap for differentially expressed genes per cluster marker genes}
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.0.8
+
+markers_subsample.all.15_08 <- FindAllMarkers(object = subsample.all.15, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+
+markers_subsample.all.15_08_top10 <- markers_subsample.all.15_08 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+
+
+p <-DoHeatmap(subsample.all.15, features=my_genes) + NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_subsample.all.15_MARKERgenes_res04.png")), width=10, height=10, dpi=300)
+
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.0.8
+avgexp = AverageExpression(subsample.all.15, return.seurat = T, add.ident = 'sub.SNN_res.0.8')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+
+p <-DoHeatmap(subsample.all.15, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_phenotypes_sub_MARKER_allcells.png")), width=10, height=10)
+```
+
+
+```{r, Heatmap for differentially expressed genes per cluster marker genes}
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.0.9
+
+markers_subsample.all.15_09 <- FindAllMarkers(object = subsample.all.15, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+
+markers_subsample.all.15_09_top10 <- markers_subsample.all.15_09 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+
+
+p <-DoHeatmap(subsample.all.15, features=my_genes) + NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_subsample.all.15_MARKERgenes_res04.png")), width=10, height=10, dpi=300)
+
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.0.9
+avgexp = AverageExpression(subsample.all.15, return.seurat = T, add.ident = 'sub.SNN_res.0.9')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+
+p <-DoHeatmap(subsample.all.15, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_phenotypes_sub_MARKER_allcells.png")), width=10, height=10)
+```
+
+```{r, Heatmap for differentially expressed genes per cluster marker genes}
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.1
+
+markers_subsample.all.15_1 <- FindAllMarkers(object = subsample.all.15, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+
+markers_subsample.all.15_1_top10 <- markers_subsample.all.15_1 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+
+
+p <-DoHeatmap(subsample.all.15, features=my_genes) + NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_subsample.all.15_MARKERgenes_res01.png")), width=10, height=10, dpi=300)
+
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.1
+avgexp = AverageExpression(subsample.all.15, return.seurat = T, add.ident = 'sub.SNN_res.1')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+
+p <-DoHeatmap(subsample.all.15, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_phenotypes_sub_MARKER_allcells.png")), width=10, height=10)
+```
+```{r, Heatmap for differentially expressed genes per cluster marker genes}
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.1.1
+
+markers_subsample.all.15_11 <- FindAllMarkers(object = subsample.all.15, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+
+markers_subsample.all.15_11_top10 <- markers_subsample.all.15_11 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+
+
+p <-DoHeatmap(subsample.all.15, features=my_genes) + NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_subsample.all.15_MARKERgenes_res01.png")), width=10, height=10, dpi=300)
+
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.1.1
+avgexp = AverageExpression(subsample.all.15, return.seurat = T, add.ident = 'sub.SNN_res.1.1')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+
+p <-DoHeatmap(subsample.all.15, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_phenotypes_sub_MARKER_allcells.png")), width=10, height=10)
+```
+
+```{r, Heatmap for differentially expressed genes per cluster marker genes}
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.1.2
+
+markers_subsample.all.15_12 <- FindAllMarkers(object = subsample.all.15, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+
+markers_subsample.all.15_12_top10 <- markers_subsample.all.15_12 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+
+
+p <-DoHeatmap(subsample.all.15, features=my_genes) + NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_subsample.all.15_MARKERgenes_res01.png")), width=10, height=10, dpi=300)
+
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.1.2
+avgexp = AverageExpression(subsample.all.15, return.seurat = T, add.ident = 'sub.SNN_res.1.2')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+
+p <-DoHeatmap(subsample.all.15, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_phenotypes_sub_MARKER_allcells.png")), width=10, height=10)
+```
+
+```{r, Heatmap for differentially expressed genes per cluster marker genes}
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.1.3
+
+markers_subsample.all.15_13 <- FindAllMarkers(object = subsample.all.15, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+
+markers_subsample.all.15_13_top10 <- markers_subsample.all.15_13 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+
+
+p <-DoHeatmap(subsample.all.15, features=my_genes) + NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_subsample.all.15_MARKERgenes_res01.png")), width=10, height=10, dpi=300)
+
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.1.3
+avgexp = AverageExpression(subsample.all.15, return.seurat = T, add.ident = 'sub.SNN_res.1.3')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+
+p <-DoHeatmap(subsample.all.15, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_phenotypes_sub_MARKER_allcells.png")), width=10, height=10)
+```
+
+```{r, Heatmap for differentially expressed genes per cluster marker genes}
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.1.4
+
+markers_subsample.all.15_14 <- FindAllMarkers(object = subsample.all.15, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+
+markers_subsample.all.15_14_top10 <- markers_subsample.all.15_14 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+
+
+p <-DoHeatmap(subsample.all.15, features=my_genes) + NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_subsample.all.15_MARKERgenes_res01.png")), width=10, height=10, dpi=300)
+
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.1.4
+avgexp = AverageExpression(subsample.all.15, return.seurat = T, add.ident = 'sub.SNN_res.1.4')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+
+p <-DoHeatmap(subsample.all.15, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_phenotypes_sub_MARKER_allcells.png")), width=10, height=10)
+```
+
+
+```{r, Heatmap for differentially expressed genes per cluster marker genes}
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.1.5
+
+markers_subsample.all.15_15 <- FindAllMarkers(object = subsample.all.15, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+
+markers_subsample.all.15_15_top10 <- markers_subsample.all.15_15 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+
+
+p <-DoHeatmap(subsample.all.15, features=my_genes) + NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_subsample.all.15_MARKERgenes_res01.png")), width=10, height=10, dpi=300)
+
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.1.5
+avgexp = AverageExpression(subsample.all.15, return.seurat = T, add.ident = 'sub.SNN_res.1.5')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+
+p <-DoHeatmap(subsample.all.15, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_phenotypes_sub_MARKER_allcells.png")), width=10, height=10)
+```
+
+```{r, Heatmap for differentially expressed genes per cluster marker genes}
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.2
+
+markers_subsample.all.15_2 <- FindAllMarkers(object = subsample.all.15, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+
+markers_subsample.all.15_2_top10 <- markers_subsample.all.15_2 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+
+
+p <-DoHeatmap(subsample.all.15, features=my_genes) + NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_subsample.all.15_MARKERgenes_res01.png")), width=10, height=10, dpi=300)
+
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.2
+avgexp = AverageExpression(subsample.all.15, return.seurat = T, add.ident = 'sub.SNN_res.2')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+
+p <-DoHeatmap(subsample.all.15, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_phenotypes_sub_MARKER_allcells.png")), width=10, height=10)
+```
+
+```{r, Add identity marker genes, fig.height=12, fig.width=6}
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.1
+
+#add sCAFs / mCAFs to labels for all IMC markers
+x <- c(0:18)
+y <-c("pericyte_1", "pericyte_2", "mCAF", "tpCAF", "iCAF", "apCAF","rCAF", "apCAF", "tpCAF", "mCAF","tpCAF", "vCAF", "iCAF", "iCAF", "mCAF", "iCAF", "tpCAF", "mCAF", "dCAF")
+pheno_sub_cluster <- as.data.frame(cbind(x,y))
+colnames(pheno_sub_cluster) <-c("Cluster","CAF_type")
+
+pheno_sub <- pheno_sub_cluster$CAF_type
+pheno_sub <-as.character(pheno_sub)
+names(x = pheno_sub) <- levels(x = subsample.all.15)
+subsample.all.15 <- RenameIdents(object = subsample.all.15, pheno_sub)
+
+#Save celltype information in metadata
+subsample.all.15[["phenotype_sub"]] <- Idents(object = subsample.all.15)
+
+
+
+#metacluster_sub for all IMC markers
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.0.1
+
+#add sCAFs / mCAFs to labels
+x <- c(0:1)
+y <-c("sCAF","aCAF")
+pheno_meta_cluster <- as.data.frame(cbind(x,y))
+colnames(pheno_meta_cluster) <-c("Cluster","CAF_type")
+
+pheno_sub <- pheno_meta_cluster$CAF_type
+pheno_sub <-as.character(pheno_sub)
+names(x = pheno_sub) <- levels(x = subsample.all.15)
+subsample.all.15 <- RenameIdents(object = subsample.all.15, pheno_sub)
+
+#Save celltype information in metadata
+subsample.all.15[["phenotype_sub_meta"]] <- Idents(object = subsample.all.15)
+```
+
+```{r, Add identity marker genes, fig.height=12, fig.width=6}
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.0.4
+
+#add sCAFs / mCAFs to labels for all IMC markers
+x <- c(0:8)
+y <-c("mCAF","vCAF","iCAF","pericytes","iCAF","apCAF + dCAF","tpCAF","tpCAF","rCAF")
+pheno_sub_cluster <- as.data.frame(cbind(x,y))
+colnames(pheno_sub_cluster) <-c("Cluster","CAF_type")
+
+pheno_sub <- pheno_sub_cluster$CAF_type
+pheno_sub <-as.character(pheno_sub)
+names(x = pheno_sub) <- levels(x = subsample.all.15)
+subsample.all.15 <- RenameIdents(object = subsample.all.15, pheno_sub)
+
+#Save celltype information in metadata
+subsample.all.15[["phenotype_sub"]] <- Idents(object = subsample.all.15)
+
+
+
+#metacluster_sub for all IMC markers
+Idents(subsample.all.15) <- subsample.all.15$sub.SNN_res.0.1
+
+#add sCAFs / mCAFs to labels
+x <- c(0:1)
+y <-c("aCAF","sCAF")
+pheno_meta_cluster <- as.data.frame(cbind(x,y))
+colnames(pheno_meta_cluster) <-c("Cluster","CAF_type")
+
+pheno_sub <- pheno_meta_cluster$CAF_type
+pheno_sub <-as.character(pheno_sub)
+names(x = pheno_sub) <- levels(x = subsample.all.15)
+subsample.all.15 <- RenameIdents(object = subsample.all.15, pheno_sub)
+
+#Save celltype information in metadata
+subsample.all.15[["phenotype_sub_meta"]] <- Idents(object = subsample.all.15)
+```
+
+
+
+```{r, HM marker genes}
+Idents(subsample.all.15) <- subsample.all.15$phenotype_sub
+
+avgexp = AverageExpression(subsample.all.15, return.seurat = T, add.ident = 'phenotype_sub')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F,group.colors =palette("Tableau 10")) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+ggsave(p, file=file.path(results.folder, paste("HM_average_subMARKERgenes_BC.png")), width=10, height=10, dpi=300)
+
+DoMultiBarHeatmap(object = subsample.all.15, group.by="phenotype_final", additional.group.by=c("phenotype_sub","phenotype_sub_meta","meta2"),features = my_genes)+scale_fill_viridis_c()
+```
+
+####
+cluster with only a few marker genes
+
+
+#clustering over subset of markers
+
+```{r, genes to use}
+#defined key markers
+my_genes <-c("FAP","PDPN","PLA2G2A","MMP11","COL1A1","MME","NDRG1","MCAM","CCL21","CD74","MKI67","RGS5","CFD","IDO1","HSPH1")
+```
+
+
+```{r, fig.width=20, fig.height=20}
+#make subsample.all.15.all from genes to use
+subsample.all.15.all <- subset(all.fibroblast.h, features = my_genes)
+
+#build graph
+subsample.all.15.all <- FindNeighbors(object = subsample.all.15.all, dims = 1:25, graph.name = "sub.SNN")
+
+#cluster
+subsample.all.15.all <- FindClusters(object = subsample.all.15.all, resolution = seq(from = 0.1, to = 2, by = 0.1),graph.name = "sub.SNN")
+
+#clustree
+p_c<-clustree(subsample.all.15.all, prefix = "sub.SNN_res.", exprs = "scale.data")
+
+plot(p_c)
+#ggsave(p_c, file=file.path(results.folder, paste("clustree_subsample.all.15.all_markergenes.pdf")))
+```
+
+
+```{r, Heatmap for differentially expressed genes per cluster marker genes}
+Idents(subsample.all.15.all) <- subsample.all.15.all$sub.SNN_res.0.4
+harmony_markers_subsample.all.15.all_04 <- FindAllMarkers(object = subsample.all.15.all, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+
+harmony_markers_subsample.all.15.all_04_top10 <- harmony_markers_subsample.all.15.all_04 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+
+p <-DoHeatmap(subsample.all.15.all, features=my_genes) + NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_subsample.all.15.all_MARKERgenes_res04.png")), width=10, height=10, dpi=300)
+
+Idents(subsample.all.15.all) <- subsample.all.15.all$sub.SNN_res.0.4
+avgexp = AverageExpression(subsample.all.15.all, return.seurat = T, add.ident = 'sub.SNN_res.0.4')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+
+p <-DoHeatmap(subsample.all.15.all, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_phenotypes_sub_MARKER_allcells.png")), width=10, height=10)
+```
+
+```{r, Heatmap for differentially expressed genes per cluster marker genes}
+Idents(subsample.all.15.all) <- subsample.all.15.all$sub.SNN_res.0.5
+harmony_markers_subsample.all.15.all_05 <- FindAllMarkers(object = subsample.all.15.all, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+
+harmony_markers_subsample.all.15.all_05_top10 <- harmony_markers_subsample.all.15.all_05 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+
+p <-DoHeatmap(subsample.all.15.all, features=my_genes) + NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_subsample.all.15.all_MARKERgenes_res05.png")), width=10, height=10, dpi=300)
+
+Idents(subsample.all.15.all) <- subsample.all.15.all$sub.SNN_res.0.5
+avgexp = AverageExpression(subsample.all.15.all, return.seurat = T, add.ident = 'sub.SNN_res.0.5')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+
+p <-DoHeatmap(subsample.all.15.all, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_phenotypes_sub_MARKER_allcells.png")), width=10, height=10)
+```
+
+
+```{r, Heatmap for differentially expressed genes per cluster marker genes}
+Idents(subsample.all.15.all) <- subsample.all.15.all$sub.SNN_res.0.6
+harmony_markers_subsample.all.15.all_06 <- FindAllMarkers(object = subsample.all.15.all, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+
+harmony_markers_subsample.all.15.all_06_top10 <- harmony_markers_subsample.all.15.all_06 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+
+p <-DoHeatmap(subsample.all.15.all, features=my_genes) + NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_subsample.all.15.all_MARKERgenes_res06.png")), width=10, height=10, dpi=300)
+
+Idents(subsample.all.15.all) <- subsample.all.15.all$sub.SNN_res.0.6
+avgexp = AverageExpression(subsample.all.15.all, return.seurat = T, add.ident = 'sub.SNN_res.0.6')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+
+p <-DoHeatmap(subsample.all.15.all, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_phenotypes_sub_MARKER_allcells.png")), width=10, height=10)
+```
+
+
+```{r, Heatmap for differentially expressed genes per cluster marker genes}
+Idents(subsample.all.15.all) <- subsample.all.15.all$sub.SNN_res.0.7
+harmony_markers_subsample.all.15.all_07 <- FindAllMarkers(object = subsample.all.15.all, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+
+harmony_markers_subsample.all.15.all_07_top10 <- harmony_markers_subsample.all.15.all_07 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+
+p <-DoHeatmap(subsample.all.15.all, features=my_genes) + NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_subsample.all.15.all_MARKERgenes_res07.png")), width=10, height=10, dpi=300)
+
+Idents(subsample.all.15.all) <- subsample.all.15.all$sub.SNN_res.0.7
+avgexp = AverageExpression(subsample.all.15.all, return.seurat = T, add.ident = 'sub.SNN_res.0.7')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+
+p <-DoHeatmap(subsample.all.15.all, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_phenotypes_sub_MARKER_allcells.png")), width=10, height=10)
+```
+
+
+```{r, Heatmap for differentially expressed genes per cluster marker genes}
+Idents(subsample.all.15.all) <- subsample.all.15.all$sub.SNN_res.0.8
+
+harmony_markers_subsample.all.15.all_08 <- FindAllMarkers(object = subsample.all.15.all, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+
+harmony_markers_subsample.all.15.all_08_top10 <- harmony_markers_subsample.all.15.all_08 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+
+p <-DoHeatmap(subsample.all.15.all, features=my_genes) + NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_subsample.all.15.all_MARKERgenes_res04.png")), width=10, height=10, dpi=300)
+
+Idents(subsample.all.15.all) <- subsample.all.15.all$sub.SNN_res.0.8
+avgexp = AverageExpression(subsample.all.15.all, return.seurat = T, add.ident = 'sub.SNN_res.0.8')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+
+p <-DoHeatmap(subsample.all.15.all, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_phenotypes_sub_MARKER_allcells.png")), width=10, height=10)
+
+```
+
+```{r, Heatmap for differentially expressed genes per cluster marker genes}
+Idents(subsample.all.15.all) <- subsample.all.15.all$sub.SNN_res.1
+
+harmony_markers_subsample.all.15.all_1 <- FindAllMarkers(object = subsample.all.15.all, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, test.use="MAST")
+
+harmony_markers_subsample.all.15.all_1_top10 <- harmony_markers_subsample.all.15.all_1 %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+
+p <-DoHeatmap(subsample.all.15.all, features=my_genes) + NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_subsample.all.15.all_MARKERgenes_res04.png")), width=10, height=10, dpi=300)
+
+Idents(subsample.all.15.all) <- subsample.all.15.all$sub.SNN_res.1
+avgexp = AverageExpression(subsample.all.15.all, return.seurat = T, add.ident = 'sub.SNN_res.1')
+p <-DoHeatmap(avgexp, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+
+p <-DoHeatmap(subsample.all.15.all, features=my_genes, draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+#ggsave(p, file=file.path(results.folder, paste("HM_phenotypes_sub_MARKER_allcells.png")), width=10, height=10)
+```
+
+
+```{r, Add identity marker genes, fig.height=12, fig.width=6}
+Idents(subsample.all.15.all) <- subsample.all.15.all$sub.SNN_res.0.8
+
+#add sCAFs / mCAFs to labels for all IMC markers
+x <- c(0:18)
+y <-c("Pericyte","mCAF","iCAF","iCAF","rCAF","mCAF","hsp_tpCAF","Pericyte","vCAF","iCAF","iCAF","IDO_CAF","apCAF + dCAF","tpCAF","hsp_tpCAF")
+pheno_sub_cluster <- as.data.frame(cbind(x,y))
+colnames(pheno_sub_cluster) <-c("Cluster","CAF_type")
+
+pheno_sub <- pheno_sub_cluster$CAF_type
+pheno_sub <-as.character(pheno_sub)
+names(x = pheno_sub) <- levels(x = subsample.all.15.all)
+subsample.all.15.all <- RenameIdents(object = subsample.all.15.all, pheno_sub)
+
+#Save celltype information in metadata
+subsample.all.15.all[["phenotype_sub"]] <- Idents(object = subsample.all.15.all)
+
+
+
+```
+
+#average of marker genes after clustering with subset of features
+```{r}
+avgexp = AverageExpression(subsample.all.15.all, return.seurat = T, add.ident = "phenotype_sub")
+p <-DoHeatmap(avgexp, features=c(my_genes), draw.lines = F, ) + scale_fill_gradientn(colors = c("blue", "white", "red"))#+ NoLegend()+scale_fill_viridis()
+p
+```
+
+
+```{r, Sankey plot using marker genes, fig.width=20, fig.height=10}
+tdat_seurat_all <-data.frame(subsample.all.15.all$phenotype_sub, subsample.all.15.all$CAFtype)
+colnames(tdat_seurat_all) <- c("Phenotype_SUB","Phenotype_ALL")
+df <- tdat_seurat_all
+
+df.f <-dplyr::rename(dplyr::count(df, Phenotype_SUB, Phenotype_ALL), Freq = n)
+
+#sankey plot 4 categories
+
+p <-ggplot(data = df.f,
+       aes(axis1 =Phenotype_ALL,axis2 = Phenotype_SUB,
+           y = Freq)) +
+  scale_x_discrete(limits = c("Phenotype ALL", "Phenotype SUB"),
+                   expand = c(0.01, .001)) +
+  #xlab("CAF type distribution") +
+  ylab("Absolute number of cells")+
+  geom_alluvium(aes(fill = Phenotype_SUB)) +
+  geom_stratum(width=0.5) +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum),size=15)) +
+  theme(panel.background = element_blank(),
+        legend.title = element_text(size=15),
+        legend.text = element_text(size=15),
+        axis.text.x = element_text(color="black", size=15, face="bold"),
+        axis.title.y = element_text(color="black", size=15, face="bold"),
+        axis.text.y = element_text(color="black", size=15))+
+  labs(fill="Phenotype as of scRNAseq")
+
+ # ggtitle("passengers on the maiden voyage of the Titanic")
+plot(p)
+
+#sankey plot 2 categories
+
+p <-ggplot(data = df.f,
+       aes(axis1 =Phenotype,
+           axis6= Phenotype_sub,
+           y = Freq)) +
+  scale_x_discrete(limits = c("scRNAseq Phenotype","IMC genes Phenotype"),
+                   expand = c(0.01, .001)) +
+  #xlab("CAF type distribution") +
+  ylab("Absolute number of cells")+
+  geom_alluvium(aes(fill = Phenotype)) +
+  geom_stratum(width=0.5) +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum),size=15)) +
+  theme(panel.background = element_blank(),
+        legend.title = element_text(size=15),
+        legend.text = element_text(size=15),
+        axis.text.x = element_text(color="black", size=15, face="bold"),
+        axis.title.y = element_text(color="black", size=15, face="bold"),
+        axis.text.y = element_text(color="black", size=15))+
+  labs(fill="Phenotype as of scRNAseq")
+
+ # ggtitle("passengers on the maiden voyage of the Titanic")
+plot(p)
+
+#ggsave(p, file=file.path(results.folder, paste("sankey-plot_Dataset-pre-sub-clustering_marker_genes-2COLUMNS only.pdf")), width=18, height=12, dpi=1000)
+
+
+#percentual
+#scRNAseq filled by IMC
+p <-
+  ggplot(df.f, aes(x=Phenotype, y = Freq, fill=Phenotype_sub)) +
+  #scale_fill_viridis(discrete=TRUE)+
+  geom_bar(stat="identity", position="fill")+
+  theme(axis.title.x=element_blank(), axis.title.y = element_blank())+
+  coord_flip()+
+  theme(panel.background = element_blank(), axis.text.x = element_text(hjust=1, angle=45))+
+  ggtitle("scRNAseq clusters filled by IMC clustering clusters")+
+  scale_fill_tableau()
+plot(p)
+#ggsave(p, file=file.path(results.folder, paste("scRNAseq-cluster-composition-of-IMCgenes-clusters.pdf")))
+
+#IMC genes filled by scRNAseq
+p <-
+  ggplot(df.f, aes(x=Phenotype_sub, y = Freq, fill=Phenotype)) +
+  #scale_fill_viridis(discrete=TRUE)+
+  geom_bar(stat="identity", position="fill")+
+  theme(axis.title.x=element_blank(), axis.title.y = element_blank())+
+  coord_flip()+
+  theme(panel.background = element_blank(), axis.text.x = element_text(hjust=1, angle=45))+
+  ggtitle("IMC clusters filled by scRNAseq clustering clusters")+
+  scale_fill_tableau()
+plot(p)
+#ggsave(p, file=file.path(results.folder, paste("scRNAseq-cluster-composition-of-IMCgenes-clusters.pdf")))
+
+```
+
+
+#GSEA for validation datasets
+```{r}
+all.final
+fibro.combined.all.h
+```
+
+```{r}
+ElbowPlot(all.final)
+```
+
+```{r}
+all.final.gsea <- all.final
+all.final.gsea <- fibro.combined.all.h
+
+all.final.gsea <- SCTransform(all.final.gsea , verbose = TRUE)
+
+logfc.data <- logFC(cluster.ids=all.final@meta.data$CAFtype,
+                    expr.mat=all.final[["SCT"]]@data )
+
+logfc.data <- logFC(cluster.ids=all.final.gsea@meta.data$CAFtype,
+                    expr.mat=all.final.gsea[["SCT"]]@scale.data )
+names(logfc.data)
+
+#all.fibroblast[["SCT"]]@data 
+#all.final[["SCT"]]@data 
+
+```
+
+```{r}
+gse.res <- wmw_gsea(expr.mat=all.final.gsea[["SCT"]]@scale.data,cluster.cells=logfc.data[[1]],log.fc.cluster=logfc.data[[2]],gene.sets=h.sets)
+```
+
+```{r}
+res.stats <- gse.res[["GSEA_statistics"]]
+res.pvals <- gse.res[["GSEA_p_values"]]
+
+res.pvals <- apply(res.pvals,2,p.adjust,method="fdr") #Correct for multiple comparisons
+
+res.stats[order(res.stats[,1],decreasing=TRUE)[1:10],] #Top gene sets enriched by z scores
+```
+
+```{r}
+res.pvals[order(res.stats[,1],decreasing=TRUE)[1:10],] #Top gene sets by p values
+```
+
+```{r}
+#names(h.sets)[sets.to.use[1:5]] #Compare to the simulate sets we created
+```
+
+```{r, fig.width=8, fig.height=18}
+#heatmap3(res.stats,Colv=NA,cexRow=0.5,cexCol=1,scale="row")
+
+library(colorRamps)
+library(pheatmap)
+library(RColorBrewer)
+
+df <- res.stats
+df$hallmark <- rownames(df)
+library(stringr)
+df <- df %>%
+      mutate_at("hallmark", str_replace, "HALLMARK_", "")
+rownames(df) <- df$hallmark
+df$hallmark <-NULL
+
+
+pheatmap(as.matrix(df),   color = blue2red(200))
+
+pheatmap(as.matrix(res.stats),   color = blue2red(200))
+
+rdylbu <-rev(brewer.pal(11,"RdYlBu"))
+
+
+library(colorRamps)
+pheatmap(as.matrix(df),  breaks = seq(-4, 4, length.out = 200),   color = colorRampPalette(c("navy", "white", "red"))(200))
+
+pdf(file=file.path(data_folder, "merge_pdac15","GSEA_CAFtypes_n_validation.pdf"), height=8, width=18)
+pheatmap(t(as.matrix(df)),  breaks = seq(-4, 4, length.out = 200),   color = colorRampPalette(c("navy", "white", "red"))(200))
+dev.off()
+```
+
+#gsea for clusters
+
+#GSEA for validation datasets
+```{r}
+all.final
+fibro.combined.all.h
+```
+
+```{r}
+ElbowPlot(all.final)
+```
+
+```{r}
+all.final.gsea <- all.final
+all.final.gsea <- fibro.combined.all.h
+
+all.final.gsea <- SCTransform(all.final.gsea , verbose = TRUE)
+
+
+logfc.data <- logFC(cluster.ids=all.final.gsea@meta.data$integrated.fibros.all.small_res.0.7,
+                    expr.mat=all.final.gsea[["SCT"]]@scale.data )
+
+names(logfc.data)
+
+#all.fibroblast[["SCT"]]@data 
+#all.final[["SCT"]]@data 
+
+```
+
+```{r}
+gse.res <- wmw_gsea(expr.mat=all.final.gsea[["SCT"]]@scale.data,cluster.cells=logfc.data[[1]],log.fc.cluster=logfc.data[[2]],gene.sets=h.sets)
+```
+
+```{r}
+res.stats <- gse.res[["GSEA_statistics"]]
+res.pvals <- gse.res[["GSEA_p_values"]]
+
+res.pvals <- apply(res.pvals,2,p.adjust,method="fdr") #Correct for multiple comparisons
+
+res.stats[order(res.stats[,1],decreasing=TRUE)[1:10],] #Top gene sets enriched by z scores
+```
+
+```{r}
+res.pvals[order(res.stats[,1],decreasing=TRUE)[1:10],] #Top gene sets by p values
+```
+
+```{r}
+#names(h.sets)[sets.to.use[1:5]] #Compare to the simulate sets we created
+```
+
+```{r, fig.width=8, fig.height=18}
+#heatmap3(res.stats,Colv=NA,cexRow=0.5,cexCol=1,scale="row")
+
+library(colorRamps)
+library(pheatmap)
+library(RColorBrewer)
+
+df <- res.stats
+df$hallmark <- rownames(df)
+library(stringr)
+df <- df %>%
+      mutate_at("hallmark", str_replace, "HALLMARK_", "")
+rownames(df) <- df$hallmark
+df$hallmark <-NULL
+
+
+pheatmap(as.matrix(df),   color = blue2red(200))
+
+pheatmap(as.matrix(res.stats),   color = blue2red(200))
+
+rdylbu <-rev(brewer.pal(11,"RdYlBu"))
+
+
+library(colorRamps)
+pheatmap(as.matrix(df),  breaks = seq(-4, 4, length.out = 200),   color = colorRampPalette(c("navy", "white", "red"))(200))
+
+pdf(file=file.path(data_folder, "merge_pdac15","GSEA_CAFtypes_n_validation_clusters07.pdf"), height=8, width=18)
+pheatmap(t(as.matrix(df)),  breaks = seq(-4, 4, length.out = 200),   color = colorRampPalette(c("navy", "white", "red"))(200))
+dev.off()
+```
